@@ -4,5 +4,5 @@ export interface BentoItem {
     name: string;
     desc: string;
     price: number;
-    stutus: number;
+    stutus?: number;
 }
