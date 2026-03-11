@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-secondary font-inter antialiased;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-6 py-3 rounded-xl font-bold transition-all duration-200 inline-block text-center cursor-pointer;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-white hover:opacity-90;
+  }
+
+  .form-input {
+    @apply w-full px-4 py-3 rounded-xl border border-border focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-20 transition-all;
+  }
+}
+
+/* Calendar Overrides */
+.react-calendar {
+  width: 100% !important;
+  max-width: 100% !important;
+  border: none !important;
+  font-family: inherit !important;
+  background: transparent !important;
+}
+
+.react-calendar__tile--active {
+  @apply bg-primary rounded-[8px] !important;
+}
+
+.react-calendar__tile--now {
+  @apply bg-[#fff0f0] text-primary rounded-[8px] !important;
+}
+
+/* Next.js 開発用ツール（アイコン・バッジ・バナー）を徹底的に消す */
+next-route-announcer,
+#nextjs-build-indicator,
+#nextjs-dev-overlay,
+#nextjs-static-indicator,
+[data-nextjs-build-indicator],
+[data-nextjs-static-indicator],
+[data-nextjs-toast],
+[data-nextjs-dialog-overlay] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Next.js のデバッグ用アイコンを強制的に非表示にする */
+nextjs-portal,
+#nextjs-dev-indicator,
+[data-nextjs-toast-wrapper] {
+  display: none !important;
+}
+
+/* カレンダーから土日を完全に非表示にする */
+.custom-calendar.hide-weekends .react-calendar__month-view__weekdays__weekday:nth-child(1),
+.custom-calendar.hide-weekends .react-calendar__month-view__weekdays__weekday:nth-child(7),
+.custom-calendar.hide-weekends .react-calendar__month-view__days__day:nth-child(7n+1),
+.custom-calendar.hide-weekends .react-calendar__month-view__days__day:nth-child(7n) {
+  display: none !important;
+}
+
+/* 残りの5日間（平日）で幅を均等に分ける */
+.custom-calendar.hide-weekends .react-calendar__month-view__weekdays__weekday,
+.custom-calendar.hide-weekends .react-calendar__month-view__days__day {
+  flex-basis: 20% !important;
+  max-width: 20% !important;
+}
+
+/* カレンダー全体のデザインをプレミアムに調整 */
+.custom-calendar {
+  background: #ffffff;
+  padding: 10px;
+  /* スマホ向けに最小限に */
+  border-radius: 20px;
+  border: 1px solid #eaeced;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .custom-calendar {
+    padding: 18px;
+  }
+}
+
+/* ナビゲーションの窮屈さを解消 */
+.react-calendar__navigation {
+  margin-bottom: 12px;
+  display: flex;
+  height: 44px;
+}
+
+.react-calendar__navigation button {
+  min-width: 32px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  border-radius: 8px;
+}
+
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+  background-color: #f1f2f6;
+}
+
+.react-calendar__month-view__weekdays {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #b2bec3;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.react-calendar__tile {
+  height: 50px !important;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #2d3436;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.react-calendar__tile:hover {
+  background: #f1f2f6 !important;
+}
+
+.react-calendar__tile--disabled {
+  background: transparent !important;
+  color: #dfe6e9 !important;
+}
+
+/* 予約ドットの配置調整 */
+.react-calendar__tile abbr {
+  margin-bottom: 2px;
+}
+
+/* ナビゲーションラベルを操作不可（表示のみ）にする */
+.react-calendar__navigation__label {
+  pointer-events: none !important;
+  background: none !important;
+  cursor: default !important;
+}
+
+.react-calendar__navigation__label__textContent {
+  font-weight: 800;
+  color: #2d3436;
+}

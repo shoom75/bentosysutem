@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>フロントエンドUIテスト</title>
+</head>
+
+<body>
+    <h1>お弁当予約（スプレッドシート連携）</h1>
+    <form id="orderForm">
+        氏名: <input type="text" id="student_name" required><br>
+        弁当: <select id="bento_type" required>
+            <option value="">選択してください</option>
+            <option value="弁当A">弁当A</option>
+            <option value="弁当B">弁当B</option>
+        </select><br>
+
+        <button type="button" id="submit-btn" onclick="sendToSheet()" disabled
+            style="opacity: 0.5; cursor: not-allowed;">
+            予約実行
+        </button>
+    </form>
+
+    <div id="log-container" style="margin-top: 20px;"></div>
+
+    <script src="../JavaScript/back.js"></script>
+</body>
+
+</html>
