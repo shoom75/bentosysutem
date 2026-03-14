@@ -3,9 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ReservationForm from '@/components/ReservationForm';
-import { BentoItem } from '@/types';
 import { getHistoryAction, reserveAction } from '@/actions';
-
 import { ALL_BENTO_ITEMS, BENTO_SCHEDULE } from '@/constants/bento';
 
 export default function BentoPage() {
@@ -21,16 +19,17 @@ export default function BentoPage() {
   const [currentItems, setCurrentItems] = useState<any[]>([]);
   const router = useRouter();
 
+  // 認証チェック
   useEffect(() => {
-    const userName = sessionStorage.getItem('userName');
-    if (!userName) {
+    const userId = sessionStorage.getItem('userId'); // 大文字小文字をログイン側と統一
+    if (!userId) {
       router.replace('/login');
     } else {
       setIsAuthorized(true);
     }
   }, [router]);
 
-  // 日付が変わったら、表示するお弁当リストを更新
+  // 日付に基づいたお弁当リストの更新
   useEffect(() => {
     if (date instanceof Date) {
       const day = date.getDay();
@@ -44,10 +43,11 @@ export default function BentoPage() {
     }
   }, [date]);
 
-  const handleReserve = async () => {
-    const userName = sessionStorage.getItem('userName') || "";
+ const handleReserve = async () => {
+    const userId = sessionStorage.getItem('userId') || "";
     const selectedItem = ALL_BENTO_ITEMS.find(item => item.id === selectedBento);
-    if (!selectedItem) return;
+    
+    if (!selectedItem || !userId) return;
 
     setIsSubmitting(true);
     
@@ -61,11 +61,12 @@ export default function BentoPage() {
     }
 
     try {
-        const result = await reserveAction({
-            name: userName,
-            bento: selectedItem.name,
-            reservationDate: selectedDateStr
-        });
+        // 【重要】オブジェクト {} で囲まず、3つの値を直接順番に渡します
+        const result = await reserveAction(
+            userId,             // student_id に対応
+            selectedItem.name,  // bento_type に対応
+            selectedDateStr     // order_date に対応
+        );
 
         if (result.success) {
             setIsCompleted(true);
@@ -79,10 +80,9 @@ export default function BentoPage() {
         setIsSubmitting(false);
     }
   };
-
+  
   const closeOverlay = () => {
     setShowOverlay(false);
-    // 完了後はトップページをリロードせずに履歴を更新させるためのトリガー
     if (isCompleted) {
         window.location.reload(); 
     }
@@ -103,7 +103,6 @@ export default function BentoPage() {
         }}
       />
 
-      {/* 選択・完了オーバーレイ */}
       {showOverlay && (
         <div className="fixed inset-0 z-[2000] flex items-end md:items-center justify-center p-0 md:p-4">
           <div 
@@ -115,7 +114,6 @@ export default function BentoPage() {
             
             {!isCompleted ? (
               <>
-                {/* 選択画面：ヘッダー */}
                 <div className="bg-[#d63031] p-5 md:p-8 text-white shrink-0">
                   <div className="flex justify-between items-center mb-1">
                     <h3 className="text-xl md:text-2xl font-black">お弁当を選択</h3>
@@ -132,7 +130,6 @@ export default function BentoPage() {
                   </p>
                 </div>
 
-                {/* 選択画面：コンテンツ */}
                 <div className="p-5 md:p-8 overflow-y-auto flex-grow">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
                     {currentItems.map((item: any) => (
@@ -195,7 +192,6 @@ export default function BentoPage() {
                 </div>
               </>
             ) : (
-              /* 完了画面 */
               <div className="flex flex-col items-center justify-center p-10 md:p-20 text-center animate-in zoom-in duration-300">
                 <div className="w-20 h-20 md:w-24 md:h-24 bg-[#2ecc71] rounded-full flex items-center justify-center mb-6 text-white text-[2.5rem] md:text-[3rem] shadow-lg shadow-green-100 animate-bounce-short">
                   ✓
@@ -213,7 +209,6 @@ export default function BentoPage() {
                 </button>
               </div>
             )}
-            
           </div>
         </div>
       )}
