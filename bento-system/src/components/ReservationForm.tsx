@@ -4,11 +4,15 @@ import React, { useState, useEffect } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 
+// 1. react-calendarが提供する可能性のある値を網羅した型
+type ValuePiece = Date | null;
+type CalendarValue = ValuePiece | [ValuePiece, ValuePiece];
+
 interface ReservationFormProps {
     date: Date;
     setDate: (date: Date) => void;
     onDateClick?: (date: Date) => void;
-    reservedDates: string[]; // 親から最新のリストを受け取る
+    reservedDates: string[];
 }
 
 export default function ReservationForm({ date, setDate, onDateClick, reservedDates }: ReservationFormProps) {
@@ -17,7 +21,6 @@ export default function ReservationForm({ date, setDate, onDateClick, reservedDa
 
     const [studentName, setStudentName] = useState("");
 
-    // フォーマット関数（判定用）
     const formatDateKey = (d: Date) => {
         return d.toLocaleDateString('ja-JP', {
             year: 'numeric',
@@ -28,25 +31,24 @@ export default function ReservationForm({ date, setDate, onDateClick, reservedDa
 
     useEffect(() => {
         const userName = sessionStorage.getItem('userName');
-        if (userName) setStudentName(userName);
-        // fetchReservedDates(userId) は親(BentoPage)がやるので、ここでは不要です
+        if (userName) {
+            setStudentName(userName);
+        }
     }, []);
 
-    const handleDateChange = (value: any) => {
+    // 2. onChangeのハンドラーを厳格に定義
+    const handleDateChange = (value: CalendarValue) => {
+        // 配列ではなく、かつDateオブジェクトである場合のみ処理
         if (value instanceof Date) {
             setDate(value);
-            if (onDateClick) {
-                onDateClick(value);
-            }
+            onDateClick?.(value);
         }
     };
 
-    // ドットの描画判定
-    const getTileContent = ({ date: tileDate, view }: { date: Date, view: string }) => {
+    const getTileContent = ({ date: tileDate, view }: { date: Date; view: string }) => {
         if (view !== 'month') return null;
         
         const tileDateStr = formatDateKey(tileDate);
-        // ★ 親から渡された最新の reservedDates を直接参照する
         const isReserved = reservedDates.includes(tileDateStr);
 
         return isReserved ? (
@@ -79,9 +81,9 @@ export default function ReservationForm({ date, setDate, onDateClick, reservedDa
                             minDetail="month"
                             maxDetail="month"
                             minDate={tomorrow}
-                            formatDay={(locale, date) => date.getDate().toString()}
+                            formatDay={(_, d) => d.getDate().toString()}
                             tileContent={getTileContent}
-                            tileDisabled={({ date }) => date.getDay() === 0 || date.getDay() === 6}
+                            tileDisabled={({ date: d }) => d.getDay() === 0 || d.getDay() === 6}
                         />
                     </div>
 
