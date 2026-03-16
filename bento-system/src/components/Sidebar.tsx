@@ -1,99 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-// actionsから型(HistoryRecord)もインポート
-import { getHistoryAction, type HistoryRecord } from '@/actions';
-import { ALL_BENTO_ITEMS } from '@/constants/bento';
-
-const bentoImageMap: { [key: string]: string } = {
-    "弁当A": "/hambagu.png", "弁当B": "/salmon.png", "弁当C": "/sushi.png",
-    "弁当D": "/hambagu.png", "弁当E": "/salmon.png", "弁当F": "/sushi.png",
-    "弁当G": "/hambagu.png",
-};
 
 export default function Sidebar() {
     const [isOpen, setIsOpen] = useState(false);
-    const [history, setHistory] = useState<HistoryRecord[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [selectedHistory, setSelectedHistory] = useState<HistoryRecord | null>(null);
     const pathname = usePathname();
-
-    const buildingStyles: { [key: string]: { bg: string, text: string, label: string } } = {
-        '1': { bg: 'bg-blue-600', text: 'text-blue-600', label: '1号館受取' },
-        '2': { bg: 'bg-red-600', text: 'text-red-600', label: '2号館受取' },
-        '3': { bg: 'bg-green-600', text: 'text-green-600', label: '3号館受取' },
-        'default': { bg: 'bg-[#2d3436]', text: 'text-gray-700', label: '1F 受付カウンター' }
-    };
 
     const toggleSidebar = () => setIsOpen(!isOpen);
 
-    // データ取得ロジックを再利用可能な形式に分離
-    const fetchHistory = useCallback(async () => {
-        const userId = sessionStorage.getItem('userId');
-        const userName = sessionStorage.getItem('userName');
-        if (!userId) return;
-
-        // キャッシュの読み込み（初回のみ）
-        if (history.length === 0) {
-            const cached = localStorage.getItem(`history_${userName}`);
-            if (cached) {
-                try { setHistory(JSON.parse(cached)); } catch (e) { }
-            }
-        }
-
-        if (history.length === 0) setIsLoading(true);
-
-        try {
-            const data = await getHistoryAction(userId);
-            if (data.success) {
-                setHistory(data.history);
-                localStorage.setItem(`history_${userName}`, JSON.stringify(data.history));
-            }
-        } catch (error) {
-            console.error("Failed to fetch history:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [history.length]);
-
-    useEffect(() => {
-        // 1. 初回およびパス変更時の読み込み
-        fetchHistory();
-
-        // 2. カスタムイベント（予約完了通知）の待機設定
-        const handleUpdate = () => {
-            console.log("Reservation update detected. Refreshing sidebar...");
-            fetchHistory();
-        };
-
-        window.addEventListener('reservation-updated', handleUpdate);
-
-        // 3. 定期更新（1分おき）
-        const interval = setInterval(fetchHistory, 60000);
-
-        // クリーンアップ
-        return () => {
-            clearInterval(interval);
-            window.removeEventListener('reservation-updated', handleUpdate);
-        };
-    }, [pathname, fetchHistory]);
-
     if (pathname?.toLowerCase() === '/login') return null;
-
-    const getBentoDetails = (name: string) => ALL_BENTO_ITEMS.find(item => item.name === name);
-
-    const groupedHistory = history.reduce((groups: { [key: string]: HistoryRecord[] }, item) => {
-        const date = item.date;
-        if (!groups[date]) groups[date] = [];
-        groups[date].push(item);
-        return groups;
-    }, {});
-
-    const sortedDates = Object.keys(groupedHistory).sort((a, b) => 
-        Math.abs(new Date(a).getTime() - Date.now()) - Math.abs(new Date(b).getTime() - Date.now())
-    );
 
     return (
         <>
@@ -117,91 +34,33 @@ export default function Sidebar() {
                 </div>
 
                 <div className="flex-grow overflow-y-auto p-4 pb-8 flex flex-col">
-                    <span className="text-[0.75rem] font-black text-[#636e72] uppercase tracking-[1.5px] mb-4 block pl-1">予約履歴</span>
+                    <span className="text-[0.75rem] font-black text-[#636e72] uppercase tracking-[1.5px] mb-4 block pl-1">メニュー</span>
                     
-                    {isLoading && history.length === 0 ? (
-                        <div className="text-center py-6 text-sm text-gray-400">読み込み中...</div>
-                    ) : history.length === 0 ? (
-                        <div className="text-center py-6 text-xs text-gray-400 italic">予約履歴はありません</div>
-                    ) : (
-                        <div className="flex flex-col gap-6">
-                            {sortedDates.map((dateStr) => (
-                                <div key={dateStr} className="flex flex-col gap-2">
-                                    <div className="flex items-center gap-2 mb-0 px-1">
-                                        <span className="text-[0.8rem] font-black text-gray-800">
-                                            {new Intl.DateTimeFormat('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date(dateStr))}
-                                        </span>
-                                        <div className="h-[1px] flex-grow bg-gray-100"></div>
-                                    </div>
-                                    <div className="flex flex-col gap-3">
-                                        {groupedHistory[dateStr].map((item, idx) => (
-                                            <div key={idx} onClick={() => setSelectedHistory(item)} className="flex gap-3 p-3 rounded-2xl bg-white border border-[#eaeced] hover:border-[#d63031] cursor-pointer transition-colors shadow-sm active:scale-95">
-                                                <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 border border-gray-100">
-                                                    <img src={bentoImageMap[item.bento] || "/hambagu.png"} alt={item.bento} className="w-full h-full object-cover" />
-                                                </div>
-                                                <div className="flex-grow min-w-0 flex flex-col justify-center">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="font-bold text-[0.85rem] text-[#2d3436] truncate">{item.bento}</span>
-                                                        <span className="text-[0.55rem] px-1.5 py-0.5 rounded-full bg-green-50 text-green-600 font-bold">{item.status || '完了'}</span>
-                                                    </div>
-                                                    <span className="text-[0.65rem] text-gray-400">予約完了</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    <div className="flex flex-col gap-2">
+                        <Link href="/" className={`flex items-center gap-3 p-3.5 rounded-xl font-bold transition-all ${pathname === '/' ? 'bg-red-50 text-[#d63031] shadow-sm' : 'text-[#636e72] hover:bg-gray-50 hover:text-[#2d3436]'}`} onClick={() => setIsOpen(false)}>
+                            <span className="text-xl">🍱</span>
+                            <span>ホーム（予約）</span>
+                        </Link>
+                        
+                        <Link href="/today" className={`flex items-center gap-3 p-3.5 rounded-xl font-bold transition-all ${pathname === '/today' ? 'bg-red-50 text-[#d63031] shadow-sm' : 'text-[#636e72] hover:bg-gray-50 hover:text-[#2d3436]'}`} onClick={() => setIsOpen(false)}>
+                            <span className="text-xl">🛍️</span>
+                            <span>当日の受け取り</span>
+                        </Link>
+
+                        <Link href="/history" className={`flex items-center gap-3 p-3.5 rounded-xl font-bold transition-all ${pathname === '/history' ? 'bg-red-50 text-[#d63031] shadow-sm' : 'text-[#636e72] hover:bg-gray-50 hover:text-[#2d3436]'}`} onClick={() => setIsOpen(false)}>
+                            <span className="text-xl">📅</span>
+                            <span>予約履歴</span>
+                        </Link>
+                    </div>
 
                     {/* 下部メニュー */}
-                    <div className="mt-auto pt-8">
+                    <div className="mt-auto pt-8 border-t border-gray-100 flex flex-col gap-2">
                         <button onClick={() => { sessionStorage.clear(); window.location.href = '/login'; }} className="w-full flex items-center gap-3 text-[#636e72] text-[0.9rem] p-3.5 rounded-xl hover:bg-red-50 hover:text-[#d63031] font-bold transition-colors">
-                            <span>👤</span><span>ログアウト</span>
+                            <span className="text-lg">👤</span><span>ログアウト</span>
                         </button>
                     </div>
                 </div>
             </aside>
-
-            {/* 詳細モーダル */}
-            {selectedHistory && (() => {
-                const details = getBentoDetails(selectedHistory.bento);
-                const buildingId = sessionStorage.getItem('building_id') || 'default';
-                const style = buildingStyles[buildingId] || buildingStyles['default'];
-                return (
-                    <div className="fixed inset-0 z-[2500] flex items-end md:items-center justify-center p-0 md:p-4">
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedHistory(null)}></div>
-                        <div className="relative bg-white w-full max-w-[500px] rounded-t-[32px] md:rounded-[32px] overflow-hidden animate-in slide-in-from-bottom duration-300">
-                            <div className={`${style.bg} p-6 text-white text-center relative`}>
-                                <h3 className="text-xl font-black">{new Date(selectedHistory.date).toLocaleDateString('ja-JP')} の予約</h3>
-                                <button onClick={() => setSelectedHistory(null)} className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-colors">✕</button>
-                            </div>
-                            <div className="p-6">
-                                <div className="flex gap-5 mb-6">
-                                    <div className="w-24 h-24 rounded-2xl overflow-hidden border border-gray-100">
-                                        <img src={bentoImageMap[selectedHistory.bento] || "/hambagu.png"} className="w-full h-full object-cover" />
-                                    </div>
-                                    <div className="flex flex-col justify-center">
-                                        <h4 className="text-lg font-black text-gray-800">{selectedHistory.bento}</h4>
-                                        <span className="text-sm font-bold text-[#d63031]">¥{details?.price.toLocaleString()}</span>
-                                    </div>
-                                </div>
-                                <div className="space-y-3 mb-8 text-sm">
-                                    <div className="flex justify-between border-b border-gray-100 pb-2">
-                                        <span className="text-gray-400">受取場所</span>
-                                        <span className={`font-bold ${style.text}`}>{style.label}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-gray-100 pb-2">
-                                        <span className="text-gray-400">ステータス</span>
-                                        <span className="font-bold text-green-600">予約完了</span>
-                                    </div>
-                                </div>
-                                <button onClick={() => setSelectedHistory(null)} className="w-full p-4 bg-gray-900 text-white rounded-2xl font-black hover:bg-gray-800 transition-colors">閉じる</button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            })()}
         </>
     );
 }

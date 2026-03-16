@@ -4,6 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginAction } from '@/actions';
 
+const toHalfWidth = (str: string) => {
+    return str.replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0));
+};
+
 export default function LoginPage() {
     const [userIdInput, setUserIdInput] = useState('');
     const [password, setPassword] = useState('');
@@ -24,8 +28,15 @@ export default function LoginPage() {
         setError('');
         setLoading(true);
 
+        const formattedUserId = toHalfWidth(userIdInput);
+        const formattedPassword = toHalfWidth(password);
+        
+        // 念のためステートにも反映させる
+        setUserIdInput(formattedUserId);
+        setPassword(formattedPassword);
+
         try {
-            const data = await loginAction(userIdInput, password);
+            const data = await loginAction(formattedUserId, formattedPassword);
             if (data.success && data.user) {
                 sessionStorage.setItem('userId', data.user.id.toString());
                 sessionStorage.setItem('studentNum', data.user.num.toString());
@@ -59,6 +70,7 @@ export default function LoginPage() {
                             className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none"
                             value={userIdInput}
                             onChange={(e) => setUserIdInput(e.target.value)}
+                            onBlur={() => setUserIdInput(toHalfWidth(userIdInput))}
                             required
                         />
                     </div>
@@ -70,6 +82,7 @@ export default function LoginPage() {
                             className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-red-500 outline-none"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            onBlur={() => setPassword(toHalfWidth(password))}
                             required
                         />
                     </div>

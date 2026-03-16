@@ -13,7 +13,7 @@ export default function BentoPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [reservedDates, setReservedDates] = useState<string[]>([]); // 予約済みリスト
-  
+
   const today = new Date();
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
   const [date, setDate] = useState<Date>(tomorrow);
@@ -80,9 +80,9 @@ export default function BentoPage() {
       const result = await reserveAction(userId, selectedItem.name, selectedDateStr);
       if (result.success) {
         setIsCompleted(true);
-       await fetchReservedDates(); 
-            window.dispatchEvent(new Event('reservation-updated'));
-            setIsCompleted(true);
+        await fetchReservedDates();
+        window.dispatchEvent(new Event('reservation-updated'));
+        setIsCompleted(true);
       } else {
         alert(result.message);
       }
@@ -93,7 +93,7 @@ export default function BentoPage() {
       setIsSubmitting(false);
     }
   };
-  
+
   const closeOverlay = () => {
     setShowOverlay(false);
     // 完了後の再読み込みは fetchReservedDates で対応しているため reload は不要だが
@@ -111,8 +111,8 @@ export default function BentoPage() {
         setDate={setDate}
         reservedDates={reservedDates} // ★これを追加！
         onDateClick={() => {
-            setIsCompleted(false);
-            setShowOverlay(true);
+          setIsCompleted(false);
+          setShowOverlay(true);
         }}
       />
 
@@ -120,7 +120,7 @@ export default function BentoPage() {
         <div className="fixed inset-0 z-[2000] flex items-end md:items-center justify-center p-0 md:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeOverlay}></div>
           <div className="relative bg-white w-full max-w-[850px] h-[90vh] md:h-auto rounded-t-[32px] md:rounded-[32px] shadow-2xl overflow-hidden flex flex-col">
-            
+
             {!isCompleted ? (
               <>
                 {/* 予約済みならヘッダーを青、未予約なら赤に */}
@@ -139,14 +139,13 @@ export default function BentoPage() {
                 <div className="p-5 md:p-8 overflow-y-auto flex-grow">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
                     {currentItems.map((item: any) => (
-                      <div 
+                      <div
                         key={item.id}
                         onClick={() => setSelectedBento(item.id)}
-                        className={`flex md:flex-col border-2 rounded-2xl cursor-pointer transition-all duration-300 overflow-hidden group ${
-                          selectedBento === item.id 
-                          ? `border-${isReserved ? '[#0984e3]' : '[#d63031]'} bg-${isReserved ? 'blue' : 'red'}-50 ring-4 ring-${isReserved ? '[#0984e3]' : '[#d63031]'}/10 shadow-lg md:translate-y-[-4px]` 
-                          : 'border-gray-100 bg-white'
-                        }`}
+                        className={`flex md:flex-col border-2 rounded-2xl cursor-pointer transition-all duration-300 overflow-hidden group ${selectedBento === item.id
+                            ? `border-${isReserved ? '[#0984e3]' : '[#d63031]'} bg-${isReserved ? 'blue' : 'red'}-50 ring-4 ring-${isReserved ? '[#0984e3]' : '[#d63031]'}/10 shadow-lg md:translate-y-[-4px]`
+                            : 'border-gray-100 bg-white'
+                          }`}
                       >
                         <div className="w-24 h-24 md:w-full md:h-40 bg-gray-100 relative shrink-0 overflow-hidden">
                           <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
@@ -165,11 +164,10 @@ export default function BentoPage() {
                     <button
                       onClick={handleReserve}
                       disabled={isSubmitting}
-                      className={`w-full p-4 md:p-5 rounded-2xl text-white font-black text-base md:text-lg shadow-xl transition-all active:scale-[0.98] ${
-                        isSubmitting ? 'bg-gray-400' : isReserved ? 'bg-[#0984e3] hover:bg-[#0873c4]' : 'bg-[#d63031] hover:bg-[#b82728]'
-                      }`}
+                      className={`w-full p-4 md:p-5 rounded-2xl text-white font-black text-base md:text-lg shadow-xl transition-all active:scale-[0.98] ${isSubmitting ? 'bg-gray-400' : isReserved ? 'bg-[#0984e3] hover:bg-[#0873c4]' : 'bg-[#d63031] hover:bg-[#b82728]'
+                        }`}
                     >
-                      {isSubmitting ? '送信中...' : isReserved ? '予約をキャンセル / 変更する' : 'この内容で予約を確定する'}
+                      {isSubmitting ? '送信中...' : isReserved ? '予約をキャンセル' : 'この内容で予約を確定する'}
                     </button>
                   </div>
                 </div>
