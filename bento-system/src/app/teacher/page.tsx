@@ -18,6 +18,8 @@ const buildingLabel: Record<number, string> = {
     1: '1号館',
     2: '2号館',
     3: '3号館',
+    4: '4号館',
+    5: '5号館',
     6: '6号館',
 };
 
