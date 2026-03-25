@@ -161,3 +161,67 @@ nextjs-portal,
   font-weight: 800;
   color: #2d3436;
 }
+
+/* 弁当がある日：淡い暖色ハイライト */
+.react-calendar__tile.has-bento-schedule {
+  background: #fff3e0 !important;
+  color: #bf5a00 !important;
+  font-weight: 700;
+  position: relative;
+}
+
+/* 左上に小さなオレンジ三角インジケーター */
+.react-calendar__tile.has-bento-schedule::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  background: #ff9800;
+  border-radius: 50%;
+  opacity: 0.75;
+}
+
+/* ホバー時は少し濃く */
+.react-calendar__tile.has-bento-schedule:hover {
+  background: #ffe0b2 !important;
+}
+
+/* 選択中（active）は通常の選択色を優先 */
+.react-calendar__tile--active.has-bento-schedule {
+  background: #d63031 !important;
+  color: #fff !important;
+}
+.react-calendar__tile--active.has-bento-schedule::before {
+  background: rgba(255,255,255,0.7);
+}
+
+/* 今日 */
+.react-calendar__tile--now.has-bento-schedule {
+  background: #fff0f0 !important;
+  color: #d63031 !important;
+}
+
+/* 無効（disabled）の場合はグレーを優先 */
+.react-calendar__tile--disabled.has-bento-schedule {
+  background: transparent !important;
+  color: #dfe6e9 !important;
+}
+.react-calendar__tile--disabled.has-bento-schedule::before {
+  display: none;
+}
+
+/* 過去・当日（予約不可）のグレーアウト */
+.react-calendar__tile.is-past-or-today {
+  background: #f1f2f6 !important;
+  color: #b2bec3 !important;
+  pointer-events: none !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+  border-radius: 0 !important;
+}
+
+.is-past-or-today::before {
+  display: none !important;
+}
