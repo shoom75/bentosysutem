@@ -1,124 +1,210 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { getHistoryAction, type HistoryRecord } from '@/actions';
-import { ALL_BENTO_ITEMS } from '@/constants/bento';
+import { getTodayOrderAction, receiveOrderAction } from '@/actions';
 
-const bentoImageMap: { [key: string]: string } = {
-    "弁当A": "/hambagu.png", "弁当B": "/salmon.png", "弁当C": "/sushi.png",
-    "弁当D": "/hambagu.png", "弁当E": "/salmon.png", "弁当F": "/sushi.png",
-    "弁当G": "/hambagu.png",
-};
-
-const buildingStyles: { [key: string]: { bg: string, text: string, label: string } } = {
+const buildingStyles: { [key: string]: { bg: string; text: string; label: string } } = {
     '1': { bg: 'bg-blue-600', text: 'text-blue-600', label: '1号館受取' },
     '2': { bg: 'bg-red-600', text: 'text-red-600', label: '2号館受取' },
     '3': { bg: 'bg-green-600', text: 'text-green-600', label: '3号館受取' },
-    'default': { bg: 'bg-[#2d3436]', text: 'text-gray-700', label: '1F 受付カウンター' }
+    '4': { bg: 'bg-green-600', text: 'text-green-600', label: '4号館受取' },
+    '5': { bg: 'bg-green-600', text: 'text-green-600', label: '5号館受取' },
+    '6': { bg: 'bg-gray-800', text: 'text-gray-800', label: '6号館受取' },
 };
 
+interface OrderInfo {
+    order_id: number;
+    bento_type: string;
+    order_date: string;
+    is_received: boolean;
+    received_at: string | null;
+}
+
+interface BentoInfo {
+    bento_id: number;
+    bento_name: string;
+    price: number;
+    explanation: string;
+    img_link: string | null;
+    allergy_info: string | null;
+}
+
+// 確認ダイアログの状態
+type ConfirmStatus = 'idle' | 'confirming';
+
 export default function TodayPage() {
-    const [todayItems, setTodayItems] = useState<HistoryRecord[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [order, setOrder] = useState<OrderInfo | null>(null);
+    const [bentoInfo, setBentoInfo] = useState<BentoInfo | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [confirmStatus, setConfirmStatus] = useState<ConfirmStatus>('idle');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [buildingId, setBuildingId] = useState('1');
 
-    const getTodayDateStr = () => {
-        return new Date().toLocaleDateString('ja-JP', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        }).replaceAll('/', '-');
-    };
-
-    const fetchTodayHistory = useCallback(async () => {
+    const fetchTodayOrder = useCallback(async () => {
         const userId = sessionStorage.getItem('userId');
-        const userName = sessionStorage.getItem('userName');
         if (!userId) return;
-
-        const todayStr = getTodayDateStr();
-
-        if (todayItems.length === 0) setIsLoading(true);
-
+        setIsLoading(true);
         try {
-            const data = await getHistoryAction(userId);
-            if (data.success) {
-                const filtered = data.history.filter((item: HistoryRecord) => item.date === todayStr);
-                setTodayItems(filtered);
-                localStorage.setItem(`history_${userName}`, JSON.stringify(data.history));
+            const result = await getTodayOrderAction(userId);
+            if (result.success) {
+                setOrder(result.order);
+                setBentoInfo(result.bentoInfo as BentoInfo | null);
             }
-        } catch (error) {
-            console.error("Failed to fetch history:", error);
+        } catch (e) {
+            console.error(e);
         } finally {
             setIsLoading(false);
         }
-    }, [todayItems.length]);
+    }, []);
 
     useEffect(() => {
-        fetchTodayHistory();
-        const handleUpdate = () => fetchTodayHistory();
-        window.addEventListener('reservation-updated', handleUpdate);
-        const interval = setInterval(fetchTodayHistory, 60000);
-        return () => {
-            clearInterval(interval);
-            window.removeEventListener('reservation-updated', handleUpdate);
-        };
-    }, [fetchTodayHistory]);
+        const bid = sessionStorage.getItem('building_id') || '1';
+        setBuildingId(bid);
+        fetchTodayOrder();
+    }, [fetchTodayOrder]);
 
-    const getBentoDetails = (name: string) => ALL_BENTO_ITEMS.find(item => item.name === name);
+    const style = buildingStyles[buildingId] || buildingStyles['default'];
+
+    // 受け取りボタン押下
+    const handleReceiveClick = () => setConfirmStatus('confirming');
+
+    // 受け取り完了処理
+    const handleFinalConfirm = async () => {
+        if (!order) return;
+        setIsProcessing(true);
+        try {
+            const result = await receiveOrderAction(order.order_id);
+            if (result.success) {
+                setOrder(prev => prev ? { ...prev, is_received: true, received_at: new Date().toISOString() } : null);
+                setConfirmStatus('idle');
+            } else {
+                alert('受け取り処理に失敗しました。再度お試しください。');
+            }
+        } catch {
+            alert('通信エラーが発生しました。');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleCancel = () => setConfirmStatus('idle');
+
+    const todayLabel = new Intl.DateTimeFormat('ja-JP', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'short',
+    }).format(new Date());
 
     return (
-        <div className="p-6 md:p-10 max-w-4xl mx-auto min-h-[100vh]">
-            <h1 className="text-3xl font-black text-gray-800 mb-8 border-b-4 border-red-600 inline-block pb-2">当日の受け取り</h1>
-            
-            {isLoading && todayItems.length === 0 ? (
-                <div className="text-center py-10 text-lg text-gray-500">読み込み中...</div>
-            ) : todayItems.length === 0 ? (
-                <div className="text-center py-10 text-lg text-gray-500 bg-gray-50 rounded-2xl border border-gray-200">本日の予約はありません</div>
+        <div className="px-4 py-4 md:p-10 max-w-2xl mx-auto min-h-screen">
+            <div className="flex justify-between items-end mb-4 border-b-2 border-red-600 pb-1">
+                <h1 className="text-xl font-black text-gray-800">
+                    受け取り
+                </h1>
+                <p className="text-gray-400 text-[10px] mb-0.5">{todayLabel}</p>
+            </div>
+
+            {isLoading ? (
+                <div className="text-center py-20 text-lg text-gray-400 animate-pulse">読み込み中...</div>
+            ) : !order ? (
+                <div className="text-center py-16 text-gray-500 bg-gray-50 rounded-3xl border border-gray-200 shadow-sm">
+                    <div className="text-5xl mb-4">🍱</div>
+                    <p className="text-lg font-bold">本日の予約はありません</p>
+                    <p className="text-sm text-gray-400 mt-1">予約ページから注文してください</p>
+                </div>
             ) : (
-                <div className="flex flex-col gap-10">
-                    <div className="flex flex-col gap-6">
-                        <div className="flex items-center gap-4">
-                            <span className="text-xl font-black text-white bg-[#d63031] px-5 py-2 rounded-full shadow-sm">
-                                本日: {new Intl.DateTimeFormat('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date())}
-                            </span>
-                            <div className="h-[2px] flex-grow bg-gray-200"></div>
+                <div className="flex flex-col gap-4">
+                    {/* 弁当カード */}
+                    <div className="bg-white rounded-[24px] overflow-hidden shadow-lg border border-gray-100">
+                        {/* 弁当画像 */}
+                        <div className="w-full h-64 sm:h-80 md:h-[400px] bg-gray-100 overflow-hidden relative">
+                            <div className={`absolute top-0 right-0 ${style.bg} px-4 py-1.5 text-white text-xs font-bold rounded-bl-xl`}>
+                                {style.label}
+                            </div>
+                            {bentoInfo?.img_link ? (
+                                <img
+                                    src={bentoInfo.img_link}
+                                    alt={bentoInfo.bento_name}
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-7xl">🍱</div>
+                            )}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-                            {todayItems.map((item, idx) => {
-                                const details = getBentoDetails(item.bento);
-                                const buildingId = typeof window !== 'undefined' ? (sessionStorage.getItem('building_id') || 'default') : 'default';
-                                const style = buildingStyles[buildingId] || buildingStyles['default'];
-                                return (
-                                    <div key={idx} className="bg-white rounded-[32px] overflow-hidden shadow-xl border border-gray-100 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                        <div className={`${style.bg} p-5 md:p-6 text-white text-center`}>
-                                            <h3 className="text-xl md:text-2xl font-black">{new Date(item.date).toLocaleDateString('ja-JP')} の受け取り</h3>
-                                        </div>
-                                        <div className="p-6 md:p-8 flex-grow flex flex-col">
-                                            <div className="flex flex-col items-center gap-4 md:gap-6 mb-6 md:mb-8">
-                                                <div className="w-full h-48 md:h-64 rounded-3xl overflow-hidden border border-gray-100 shadow-md shrink-0">
-                                                    <img src={bentoImageMap[item.bento] || "/hambagu.png"} className="w-full h-full object-cover" />
-                                                </div>
-                                                <div className="flex flex-col justify-center items-center text-center">
-                                                    <h4 className="text-2xl md:text-3xl font-black text-gray-800 mb-1 md:mb-2 leading-tight">{item.bento}</h4>
-                                                    <span className="text-xl md:text-2xl font-black text-[#d63031]">¥{details?.price.toLocaleString() || '---'}</span>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-4 mb-6 md:mb-8 text-sm md:text-base bg-gray-50 p-4 md:p-5 rounded-xl border border-gray-200">
-                                                <div className="flex justify-between border-b border-gray-200 pb-3">
-                                                    <span className="text-gray-500 font-bold">受取場所</span>
-                                                    <span className={`font-black ${style.text} text-base md:text-lg`}>{style.label}</span>
-                                                </div>
-                                                <div className="flex justify-between border-b border-gray-200 pb-3">
-                                                    <span className="text-gray-500 font-bold">ステータス</span>
-                                                    <span className="font-black text-red-600">未受け取り</span>
-                                                </div>
-                                            </div>
-                                            <div className="bg-yellow-50 text-yellow-800 p-4 rounded-xl font-bold text-center shadow-inner mt-auto text-sm md:text-base border border-yellow-200">
-                                                受取場所に到着したら、この画面を係の者に見せてください
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+
+                        {/* 弁当詳細 */}
+                        <div className="p-4 md:p-8">
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="text-xl md:text-2xl font-black text-gray-800 truncate mr-2">
+                                    {bentoInfo?.bento_name || order.bento_type}
+                                </h3>
+                                <span className="text-xl font-black text-[#d63031] shrink-0">
+                                    ¥{bentoInfo?.price.toLocaleString() || '---'}
+                                </span>
+                            </div>
+
+                            {/* アレルギー情報 */}
+                            {bentoInfo?.allergy_info && (
+                                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 text-xs text-yellow-800">
+                                    <span className="font-bold">⚠ アレルギー：</span>{bentoInfo.allergy_info}
+                                </div>
+                            )}
+
+                            {/* 情報テーブルをよりコンパクトに */}
+                            <div className="grid grid-cols-2 gap-2 mb-4 text-[13px]">
+                                <div className="bg-gray-50 p-2 rounded-lg border border-gray-100 flex flex-col">
+                                    <span className="text-gray-400 text-[10px] font-bold">注文日</span>
+                                    <span className="font-bold text-gray-700">{order.order_date}</span>
+                                </div>
+                                <div className="bg-gray-50 p-2 rounded-lg border border-gray-100 flex flex-col">
+                                    <span className="text-gray-400 text-[10px] font-bold">受取場所</span>
+                                    <span className={`font-black ${style.text}`}>{style.label}</span>
+                                </div>
+                            </div>
+
+                            {/* 受け取りボタン or 完了表示 */}
+                            {order.is_received ? (
+                                <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                                    <p className="font-black text-green-700">✅ 受け取り完了</p>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={handleReceiveClick}
+                                    className="w-full py-3.5 bg-[#d63031] hover:bg-[#b82728] text-white font-black text-lg rounded-xl shadow-md transition-all active:scale-[0.98]"
+                                >
+                                    受け取り完了にする
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ===== 確認ダイアログ（1段階に短縮） ===== */}
+            {confirmStatus === 'confirming' && (
+                <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleCancel} />
+                    <div className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 flex flex-col items-center gap-5 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-3xl">🍱</div>
+                        <h2 className="text-xl font-black text-gray-800 text-center">受け取りを完了しますか？</h2>
+                        <p className="text-gray-500 text-center text-sm">
+                            お弁当を受け取った場合の押してください。<br />このボタンを押すと戻せません
+                        </p>
+                        <div className="flex flex-col gap-3 w-full mt-2">
+                            <button
+                                onClick={handleFinalConfirm}
+                                disabled={isProcessing}
+                                className="w-full py-3.5 bg-[#d63031] hover:bg-[#b82728] text-white font-black rounded-xl"
+                            >
+                                {isProcessing ? '処理中...' : 'はい、受け取りました'}
+                            </button>
+                            <button
+                                onClick={handleCancel}
+                                className="w-full py-3 bg-gray-100 text-gray-700 font-bold rounded-xl"
+                            >
+                                キャンセル
+                            </button>
                         </div>
                     </div>
                 </div>

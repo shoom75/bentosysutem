@@ -2,19 +2,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { getHistoryAction, type HistoryRecord } from '@/actions';
-import { ALL_BENTO_ITEMS } from '@/constants/bento';
-
-const bentoImageMap: { [key: string]: string } = {
-    "弁当A": "/hambagu.png", "弁当B": "/salmon.png", "弁当C": "/sushi.png",
-    "弁当D": "/hambagu.png", "弁当E": "/salmon.png", "弁当F": "/sushi.png",
-    "弁当G": "/hambagu.png",
-};
 
 const buildingStyles: { [key: string]: { bg: string, text: string, label: string } } = {
     '1': { bg: 'bg-blue-600', text: 'text-blue-600', label: '1号館受取' },
     '2': { bg: 'bg-red-600', text: 'text-red-600', label: '2号館受取' },
     '3': { bg: 'bg-green-600', text: 'text-green-600', label: '3号館受取' },
-    'default': { bg: 'bg-[#2d3436]', text: 'text-gray-700', label: '1F 受付カウンター' }
+    '4': { bg: 'bg-yellow-600', text: 'text-yellow-600', label: '4号館受取' },
+    '5': { bg: 'bg-purple-600', text: 'text-purple-600', label: '5号館受取' },
+    '6': { bg: 'bg-gray-800', text: 'text-gray-800', label: '6号館受取' },
 };
 
 export default function HistoryPage() {
@@ -32,7 +27,7 @@ export default function HistoryPage() {
         if (history.length === 0) {
             const cached = localStorage.getItem(`history_${userName}`);
             if (cached) {
-                try { setHistory(JSON.parse(cached)); } catch (e) { }
+                try { setHistory(JSON.parse(cached)); } catch { }
             }
         }
 
@@ -62,8 +57,6 @@ export default function HistoryPage() {
         };
     }, [fetchHistory]);
 
-    const getBentoDetails = (name: string) => ALL_BENTO_ITEMS.find(item => item.name === name);
-
     const groupedHistory = history.reduce((groups: { [key: string]: HistoryRecord[] }, item) => {
         const date = item.date;
         if (!groups[date]) groups[date] = [];
@@ -71,7 +64,7 @@ export default function HistoryPage() {
         return groups;
     }, {});
 
-    const sortedDates = Object.keys(groupedHistory).sort((a, b) => 
+    const sortedDates = Object.keys(groupedHistory).sort((a, b) =>
         Math.abs(new Date(a).getTime() - Date.now()) - Math.abs(new Date(b).getTime() - Date.now())
     );
 
@@ -88,7 +81,7 @@ export default function HistoryPage() {
     return (
         <div className="p-6 md:p-10 max-w-4xl mx-auto min-h-[100vh]">
             <h1 className="text-3xl font-black text-gray-800 mb-8 border-b-4 border-red-600 inline-block pb-2">予約履歴</h1>
-            
+
             {isLoading && history.length === 0 ? (
                 <div className="text-center py-10 text-lg text-gray-500">読み込み中...</div>
             ) : history.length === 0 ? (
@@ -106,8 +99,9 @@ export default function HistoryPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {groupedHistory[dateStr].map((item, idx) => (
                                     <div key={idx} onClick={() => setSelectedHistory(item)} className="flex gap-4 p-5 rounded-3xl bg-white border border-[#eaeced] hover:border-[#d63031] cursor-pointer transition-all shadow-sm hover:shadow-md active:scale-[0.98]">
-                                        <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden shrink-0 border border-gray-100 shadow-sm">
-                                            <img src={bentoImageMap[item.bento] || "/hambagu.png"} alt={item.bento} className="w-full h-full object-cover relative z-0" />
+                                        {/* 弁当アイコン（画像なしはプレースホルダー） */}
+                                        <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden shrink-0 border border-gray-100 shadow-sm bg-orange-50 flex items-center justify-center text-4xl">
+                                            🍱
                                         </div>
                                         <div className="flex-grow min-w-0 flex flex-col justify-center">
                                             <div className="flex justify-between items-start mb-2">
@@ -125,7 +119,7 @@ export default function HistoryPage() {
                     {/* ページネーション */}
                     {totalPages > 1 && (
                         <div className="flex justify-center items-center gap-4 mt-8 pt-6 border-t border-gray-100">
-                            <button 
+                            <button
                                 onClick={() => handlePageChange(currentPage - 1)}
                                 disabled={currentPage === 1}
                                 className={`w-10 h-10 flex items-center justify-center rounded-xl font-bold transition-all ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'}`}
@@ -143,7 +137,7 @@ export default function HistoryPage() {
                                     </button>
                                 ))}
                             </div>
-                            <button 
+                            <button
                                 onClick={() => handlePageChange(currentPage + 1)}
                                 disabled={currentPage === totalPages}
                                 className={`w-10 h-10 flex items-center justify-center rounded-xl font-bold transition-all ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'}`}
@@ -157,7 +151,6 @@ export default function HistoryPage() {
 
             {/* 詳細モーダル */}
             {selectedHistory && (() => {
-                const details = getBentoDetails(selectedHistory.bento);
                 const buildingId = typeof window !== 'undefined' ? (sessionStorage.getItem('building_id') || 'default') : 'default';
                 const style = buildingStyles[buildingId] || buildingStyles['default'];
                 return (
@@ -170,12 +163,11 @@ export default function HistoryPage() {
                             </div>
                             <div className="p-8">
                                 <div className="flex gap-6 mb-8">
-                                    <div className="w-28 h-28 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-                                        <img src={bentoImageMap[selectedHistory.bento] || "/hambagu.png"} className="w-full h-full object-cover" />
+                                    <div className="w-28 h-28 rounded-2xl bg-orange-50 border border-gray-100 shadow-sm flex items-center justify-center text-5xl shrink-0">
+                                        🍱
                                     </div>
                                     <div className="flex flex-col justify-center">
                                         <h4 className="text-xl font-black text-gray-800 mb-1">{selectedHistory.bento}</h4>
-                                        <span className="text-lg font-black text-[#d63031]">¥{details?.price.toLocaleString() || '---'}</span>
                                     </div>
                                 </div>
                                 <div className="space-y-4 mb-8 text-base">

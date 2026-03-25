@@ -30,7 +30,7 @@ export default function LoginPage() {
 
         const formattedUserId = toHalfWidth(userIdInput);
         const formattedPassword = toHalfWidth(password);
-        
+
         // 念のためステートにも反映させる
         setUserIdInput(formattedUserId);
         setPassword(formattedPassword);
@@ -41,7 +41,9 @@ export default function LoginPage() {
                 sessionStorage.setItem('userId', data.user.id.toString());
                 sessionStorage.setItem('studentNum', data.user.num.toString());
                 sessionStorage.setItem('building_id', data.user.building_id.toString());
-                window.location.href = "/";
+                sessionStorage.setItem('is_root', data.user.is_root ? 'true' : 'false');
+                // 教員（is_root: true）は教員ページへ
+                window.location.href = data.user.is_root ? '/teacher' : '/';
             } else {
                 setError(data.error || 'ログインに失敗しました。');
             }
