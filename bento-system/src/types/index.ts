@@ -11,5 +11,9 @@ export interface User {
   id: number;
   num: number;
   building_id: number;
+  grade?: number;
+  class?: string;
+  attendance_num?: number;
+  email?: string;
   is_root: boolean;
 }

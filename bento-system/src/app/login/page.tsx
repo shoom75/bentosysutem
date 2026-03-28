@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginAction } from '@/actions';
+import { supabase } from '@/lib/supabase';
 
 const toHalfWidth = (str: string) => {
     return str.replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0));
@@ -38,6 +39,14 @@ export default function LoginPage() {
         try {
             const data = await loginAction(formattedUserId, formattedPassword);
             if (data.success && data.user) {
+                // Supabase クライアントにセッション（ログイン状態）を同期する（これがないとクライアントでAuth APIが使えない）
+                if (data.session) {
+                    await supabase.auth.setSession({
+                        access_token: data.session.access_token,
+                        refresh_token: data.session.refresh_token,
+                    });
+                }
+
                 sessionStorage.setItem('userId', data.user.id.toString());
                 sessionStorage.setItem('studentNum', data.user.num.toString());
                 sessionStorage.setItem('building_id', data.user.building_id.toString());
@@ -95,6 +104,22 @@ export default function LoginPage() {
                     >
                         {loading ? '認証中...' : 'ログイン'}
                     </button>
+                    <div className="mt-8 flex flex-col items-center gap-4 pt-6 border-t border-gray-100">
+                        <button 
+                            type="button"
+                            onClick={() => router.push('/signup')}
+                            className="text-sm text-gray-500 font-bold hover:text-red-600 transition-colors"
+                        >
+                            アカウントをお持ちでない方はこちら
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={() => router.push('/forgot-password')}
+                            className="text-xs text-gray-400 font-bold hover:text-red-600 transition-colors"
+                        >
+                            パスワードを忘れた場合はこちら
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>

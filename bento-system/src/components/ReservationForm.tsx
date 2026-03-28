@@ -103,6 +103,8 @@ export default function ReservationForm({ date, setDate, onDateClick, reservedDa
                             calendarType="gregory"
                             minDetail="month"
                             maxDetail="month"
+                            next2Label={null}
+                            prev2Label={null}
                             minDate={tomorrow}
                             formatDay={(_, d) => d.getDate().toString()}
                             tileContent={getTileContent}

@@ -7,8 +7,8 @@ const buildingStyles: { [key: string]: { bg: string; text: string; label: string
     '1': { bg: 'bg-blue-600', text: 'text-blue-600', label: '1号館受取' },
     '2': { bg: 'bg-red-600', text: 'text-red-600', label: '2号館受取' },
     '3': { bg: 'bg-green-600', text: 'text-green-600', label: '3号館受取' },
-    '4': { bg: 'bg-green-600', text: 'text-green-600', label: '4号館受取' },
-    '5': { bg: 'bg-green-600', text: 'text-green-600', label: '5号館受取' },
+    '4': { bg: 'bg-yellow-600', text: 'text-yellow-600', label: '4号館受取' },
+    '5': { bg: 'bg-purple-600', text: 'text-purple-600', label: '5号館受取' },
     '6': { bg: 'bg-gray-800', text: 'text-gray-800', label: '6号館受取' },
 };
 

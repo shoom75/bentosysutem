@@ -166,7 +166,7 @@ export default function BentoPage() {
       {showOverlay && (
         <div className="fixed inset-0 z-[2000] flex items-end md:items-center justify-center p-0 md:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeOverlay}></div>
-          <div className="relative bg-white w-full max-w-[850px] h-[90vh] md:h-auto rounded-t-[32px] md:rounded-[32px] shadow-2xl overflow-hidden flex flex-col">
+          <div className="relative bg-white w-full max-w-[850px] h-[90vh] md:max-h-[90vh] md:h-fit rounded-t-[32px] md:rounded-[32px] shadow-2xl overflow-hidden flex flex-col mx-4">
             {!isCompleted ? (
               <>
                 <div className="bg-[#d63031] p-5 md:p-8 text-white shrink-0">
