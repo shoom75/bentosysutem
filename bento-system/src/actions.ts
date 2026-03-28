@@ -14,13 +14,119 @@ export async function loginAction(num: string, password?: string) {
     try {
         const studentNum = parseInt(num, 10);
         if (isNaN(studentNum)) return { success: false, error: '学籍番号を数値で入力してください' };
+
+        // まず user_list から学籍番号に対応するメールアドレスを取得
+        const { data: userData, error: userError } = await supabaseClient
+            .from('user_list')
+            .select('id, num, email, building_id, is_root, auth_id')
+            .eq('num', studentNum)
+            .single();
+
+        if (userError || !userData || !userData.email) {
+            return { success: false, error: '学籍番号またはパスワードが違います' };
+        }
+
+        // Supabase Auth でメールアドレスとパスワードによる認証
+        const { data: authData, error: authError } = await supabaseClient.auth.signInWithPassword({
+            email: userData.email,
+            password: password || '',
+        });
+
+        // パスワード間違いなどのエラー
+        if (authError || !authData.user) {
+            return { success: false, error: '学籍番号またはパスワードが違います' };
+        }
+
+        return {
+            success: true,
+            user: {
+                id: userData.id,
+                num: userData.num,
+                building_id: userData.building_id,
+                is_root: userData.is_root ?? false,
+            },
+            session: authData.session
+        };
+    } catch {
+        return { success: false, error: '通信エラーが発生しました' };
+    }
+}
+
+// --- サインアップ ---
+export async function signupAction(formData: {
+    num: number;
+    password: string;
+    email: string;
+    building_id: number;
+    school_year: number;
+    class: string;
+    attendance_num: number;
+    secret_answer: string;
+}) {
+    try {
+        // 年度（Fiscal Year）計算：4月開始〜翌3月終了
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // 1-12
+        const fiscalYear = currentMonth < 4 ? currentYear - 1 : currentYear;
+
+        // すでに一致する学生データがあるか確認
+        const { data: existing, error: findErr } = await supabaseClient
+            .from('user_list')
+            .select('id, building_id, auth_id')
+            .eq('num', formData.num)
+            .eq('fiscal_year', fiscalYear)
+            .eq('school_year', formData.school_year)
+            .eq('class', formData.class)
+            .eq('attendance_num', formData.attendance_num)
+            .maybeSingle();
+
+        if (findErr) {
+            console.error('Find student error:', findErr);
+            return { success: false, error: 'データの照合に失敗しました' };
+        }
+
+        if (!existing) {
+            return { success: false, error: '入力された情報に一致する学生が見つかりませんでした。入力内容（年度、番号など）に誤りがないかご確認ください。' };
+        }
+
+        if (existing.auth_id) {
+            return { success: false, error: 'このアカウントは既に登録されています。ログインしてください。' };
+        }
+
+        // Supabase Auth にユーザーを作成
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+        const { data: authData, error: authError } = await supabaseClient.auth.signUp({
+            email: formData.email,
+            password: formData.password,
+            options: {
+                emailRedirectTo: `${siteUrl}/auth/confirm?next=/login`,
+            }
+        });
+
+        if (authError || !authData.user) {
+            console.error('Auth signup error:', authError);
+            return { success: false, error: '認証アカウントの作成に失敗しました: ' + (authError?.message || '') };
+        }
+
+        // user_list のレコードに auth_id, email, building_id, secret_answer を紐付け (password は今後保存しない)
         const { data, error } = await supabaseClient
             .from('user_list')
-            .select('id, num, password, building_id, is_root')
-            .eq('num', studentNum)
-            .eq('password', password)
+            .update({
+                auth_id: authData.user.id,
+                email: formData.email,
+                building_id: formData.building_id,
+                secret_answer: formData.secret_answer
+            })
+            .eq('id', existing.id)
+            .select()
             .single();
-        if (error || !data) return { success: false, error: '学籍番号またはパスワードが違います' };
+
+        if (error) {
+            console.error('Signup update error details:', error);
+            return { success: false, error: `アカウント紐付けに失敗しました: ${error.message} (おそらくRLSか制約によるエラーです)` };
+        }
+
         return {
             success: true,
             user: {
@@ -28,9 +134,11 @@ export async function loginAction(num: string, password?: string) {
                 num: data.num,
                 building_id: data.building_id,
                 is_root: data.is_root ?? false,
-            }
+            },
+            session: authData.session
         };
-    } catch {
+    } catch (e) {
+        console.error('Signup catch error:', e);
         return { success: false, error: '通信エラーが発生しました' };
     }
 }
@@ -270,24 +378,22 @@ export async function receiveOrderAction(orderId: number) {
     }
 }
 
-// --- 予約実行・キャンセル・変更（論理削除＋新規挿入） ---
-export async function reserveAction(userId: string, bentoType: string, date: string) {
+// --- 予約実行・キャンセルアクション ---
+export async function reserveAction(studentId: string, bentoType: string, date: string) {
     try {
-        const studentId = parseInt(userId, 10);
-        if (isNaN(studentId)) return { success: false, message: "不正なユーザーIDです" };
+        const sid = parseInt(studentId, 10);
+        if (isNaN(sid)) return { success: false, message: "無効なユーザーIDです" };
 
-        // 1. その日の有効な予約(status: true)を検索
-        const { data: activeOrders, error: fetchError } = await supabaseClient
-            .from('order_log')
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('order_date', date)
-            .eq('status', true);
+        // 同じ日付の有効な予約を確認
+        const { data: existing } = await supabaseClient
+            .from("order_log")
+            .select("order_id, bento_type")
+            .eq("student_id", sid)
+            .eq("order_date", date)
+            .eq("status", true)
+            .maybeSingle();
 
-        if (fetchError) throw fetchError;
-
-        const currentActive = activeOrders && activeOrders.length > 0 ? activeOrders[0] : null;
-
+        const currentActive = existing;
         if (currentActive) {
             // 同じ弁当を選んだ場合は「キャンセル」
             if (currentActive.bento_type === bentoType) {
@@ -349,7 +455,7 @@ export async function getTeacherOrdersAction(targetDate?: string) {
 
         if (error) throw error;
 
-        // ユーザー情報も取得
+        // ユーザー情報を取得
         const studentIds = [...new Set((orders || []).map(o => o.student_id))];
         let userMap: Record<number, { num: number; building_id: number }> = {};
         if (studentIds.length > 0) {
@@ -358,22 +464,6 @@ export async function getTeacherOrdersAction(targetDate?: string) {
                 .select('id, num, building_id')
                 .in('id', studentIds);
             (users || []).forEach(u => { userMap[u.id] = { num: u.num, building_id: u.building_id }; });
-        }
-
-        // 本日の弁当情報
-        const { data: schedules } = await supabaseClient
-            .from('schedule')
-            .select('bento_id, schedule_date')
-            .eq('schedule_date', dateStr);
-
-        const bentoIds = (schedules || []).map(s => s.bento_id);
-        let bentoMap: Record<number, { bento_name: string; price: number }> = {};
-        if (bentoIds.length > 0) {
-            const { data: bentos } = await supabaseClient
-                .from('bentoinfo')
-                .select('bento_id, bento_name, price')
-                .in('bento_id', bentoIds);
-            (bentos || []).forEach(b => { bentoMap[b.bento_id] = { bento_name: b.bento_name, price: b.price }; });
         }
 
         const result = (orders || []).map(o => ({
@@ -390,5 +480,160 @@ export async function getTeacherOrdersAction(targetDate?: string) {
     } catch (e) {
         console.error('getTeacherOrdersAction error:', e)
         return { success: false, orders: [], date: '' }
+    }
+}
+
+// --- 今後の予約集計取得 ---
+export async function getFutureSummaryAction(buildingId?: number) {
+    try {
+        const today = new Date().toLocaleDateString('ja-JP', {
+            year: 'numeric', month: '2-digit', day: '2-digit'
+        }).replaceAll('/', '-');
+
+        // 有効な将来の注文を取得
+        const { data: orders, error: orderErr } = await supabaseClient
+            .from('order_log')
+            .select('order_date, bento_type, student_id')
+            .gte('order_date', today)
+            .eq('status', true);
+
+        if (orderErr) throw orderErr;
+        if (!orders || orders.length === 0) return { success: true, summary: [] };
+
+        // 建物フィルタリングが必要な場合はユーザー情報を取得して紐付ける
+        let filteredOrders = orders;
+        if (buildingId !== undefined) {
+            const studentIds = [...new Set(orders.map(o => o.student_id))];
+            const { data: users, error: userErr } = await supabaseClient
+                .from('user_list')
+                .select('id, building_id')
+                .in('id', studentIds)
+                .eq('building_id', buildingId);
+            
+            if (userErr) throw userErr;
+            const validUserIds = new Set((users || []).map(u => u.id));
+            filteredOrders = orders.filter(o => validUserIds.has(o.student_id));
+        }
+
+        // 集計
+        const summary: Record<string, Record<string, number>> = {};
+        
+        filteredOrders.forEach(o => {
+            const date = o.order_date;
+            const type = o.bento_type;
+            if (!summary[date]) summary[date] = {};
+            summary[date][type] = (summary[date][type] || 0) + 1;
+        });
+
+        // 日付順にソートして配列化
+        const sortedDates = Object.keys(summary).sort();
+        const result = sortedDates.map(date => ({
+            date,
+            counts: summary[date]
+        }));
+
+        return { success: true, summary: result };
+    } catch (e) {
+        console.error('getFutureSummaryAction error:', e);
+        return { success: false, summary: [] };
+    }
+}
+
+// --- ユーザープロフィール取得アクション ---
+export async function getProfileAction(userId: string) {
+    try {
+        const studentId = parseInt(userId, 10);
+        if (isNaN(studentId)) return { success: false, profile: null };
+
+        const { data: user, error } = await supabaseClient
+            .from('user_list')
+            .select('num, email, building_id, secret_answer')
+            .eq('id', studentId)
+            .single();
+
+        if (error || !user) throw error;
+
+        return { success: true, profile: user };
+    } catch (e) {
+        console.error('getProfileAction error:', e);
+        return { success: false, profile: null };
+    }
+}
+
+// --- 合言葉更新用アクション ---
+export async function updateSecretAnswerAction(userId: string, newSecretAnswer: string) {
+    try {
+        const studentId = parseInt(userId, 10);
+        if (isNaN(studentId)) return { success: false, error: 'ユーザーIDが不正です' };
+
+        const { error } = await supabaseClient
+            .from('user_list')
+            .update({ secret_answer: newSecretAnswer })
+            .eq('id', studentId);
+
+        if (error) throw error;
+        
+        return { success: true };
+    } catch (e) {
+        console.error('updateSecretAnswerAction error:', e);
+        return { success: false, error: '合言葉の更新に失敗しました' };
+    }
+}
+
+// --- パスワードリセット用アクション（管理者権限使用） ---
+export async function resetPasswordWithSecretAction(num: string, secretAnswer: string, newPassword: keyof any) {
+    try {
+        const studentNum = parseInt(num, 10);
+        if (isNaN(studentNum)) return { success: false, error: '学籍番号を正しく入力してください' };
+
+        // 1. 学籍番号と合言葉でユーザーを照合
+        const { data: user, error: findErr } = await supabaseClient
+            .from('user_list')
+            .select('id, auth_id, secret_answer')
+            .eq('num', studentNum)
+            .single();
+
+        if (findErr || !user) {
+            return { success: false, error: '入力された情報が一致しません' };
+        }
+
+        // 合言葉の照合
+        if (user.secret_answer !== secretAnswer.trim()) {
+            return { success: false, error: '入力された情報が一致しません' };
+        }
+
+        if (!user.auth_id) {
+            return { success: false, error: 'このアカウントはまだ認証基盤に紐づいていません' };
+        }
+
+        // 2. マスターキーを使ってAdminクライアントを作成
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!serviceRoleKey) {
+            console.error('SUPABASE_SERVICE_ROLE_KEY is perfectly missing!');
+            return { success: false, error: 'サーバーの設定エラー：マスターキーが設定されていません' };
+        }
+
+        const { createClient } = await import('@supabase/supabase-js');
+        const adminAuthClient = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            serviceRoleKey,
+            { auth: { autoRefreshToken: false, persistSession: false } }
+        );
+
+        // 3. パスワードを強制アップデート
+        const { error: updateErr } = await adminAuthClient.auth.admin.updateUserById(
+            user.auth_id,
+            { password: newPassword as string }
+        );
+
+        if (updateErr) {
+            console.error('Password reset update error:', updateErr);
+            return { success: false, error: 'パスワードの変更に失敗しました' };
+        }
+
+        return { success: true };
+    } catch (e) {
+        console.error('resetPasswordWithSecretAction error:', e);
+        return { success: false, error: '通信エラーが発生しました' };
     }
 }
