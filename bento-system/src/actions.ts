@@ -4,9 +4,58 @@ import { supabase as supabaseClient } from '@/lib/supabase';
 
 export interface HistoryRecord {
     id: number;
+    bento_id?: number; // 追加
     bento: string;
     date: string;
     status: string;
+    price?: number;
+    img_link?: string | null;
+    allergy_info?: string | null;
+    explanation?: string | null;
+}
+
+/**
+ * 日本時間 (JST) の今日の日付文字列 (YYYY-MM-DD) を取得するヘルパー
+ */
+export function getJSTTodayStr() {
+    return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+        .toISOString().slice(0, 10);
+}
+
+/**
+ * Supabase Storage の公開URLを取得するヘルパー
+ * imgPath が http:// から始まっていればそのまま、そうでなければ Storage の URL を組み立てる
+ */
+export function getBentoImageUrl(imgPath: string | null) {
+    if (!imgPath) return null;
+    if (imgPath.startsWith('http')) return imgPath;
+    
+    // バケット名を 'bento-images' と仮定 (実際のバケット名に合わせて調整が必要)
+    const { data } = supabaseClient.storage.from('bento-images').getPublicUrl(imgPath);
+    return data.publicUrl;
+}
+
+/**
+ * 重大なエラー(例外)のみを記録するヘルパーアクション
+ */
+export async function logErrorAction(errorType: string, message: string, detailObj: any = {}, userId: string | null = null, stackTrace: string | null = null) {
+    try {
+        const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : 'ServerAction';
+        const url = typeof window !== 'undefined' ? window.location.href : 'unknown';
+        await supabaseClient.from('error_logs').insert([
+            {
+                student_id: userId,
+                error_type: errorType,
+                message: message,
+                stack_trace: stackTrace,
+                details: detailObj,
+                user_agent: userAgent,
+                url: url
+            }
+        ]);
+    } catch (e) {
+        console.error('Error logging itself failed:', e);
+    }
 }
 
 // --- ログイン（生徒・教員共通）---
@@ -47,7 +96,8 @@ export async function loginAction(num: string, password?: string) {
             },
             session: authData.session
         };
-    } catch {
+    } catch (e) {
+        await logErrorAction('LOGIN_FETCH_ERROR', String(e), { num });
         return { success: false, error: '通信エラーが発生しました' };
     }
 }
@@ -148,21 +198,55 @@ export async function getHistoryAction(userId: string) {
     try {
         const studentId = parseInt(userId, 10);
         if (isNaN(studentId)) return { success: false, history: [] };
-        const { data, error } = await supabaseClient
+        
+        // 1. 注文履歴を取得 (bento_idも取得)
+        const { data: orders, error: orderErr } = await supabaseClient
             .from('order_log')
-            .select('*')
+            .select('order_id, bento_type, order_date, status, bento_id')
             .eq('student_id', studentId)
             .eq('status', true)
             .order('order_date', { ascending: false });
-        if (error) throw error;
-        const history: HistoryRecord[] = (data || []).map(item => ({
-            id: item.order_id,
-            bento: item.bento_type,
-            date: item.order_date,
-            status: item.status ? '完了' : '未完了'
-        }));
+            
+        if (orderErr) {
+            console.error('getHistoryAction DB error:', orderErr);
+            return { success: false, history: [], error: 'データベース接続エラー' };
+        }
+        if (!orders || orders.length === 0) return { success: true, history: [] };
+
+        // 2. お弁当の詳細情報を一括取得（bento_idで照合）
+        const bentoIds = [...new Set(orders.map((o: any) => o.bento_id).filter((id: any) => id != null))];
+        const { data: bentoInfos } = await supabaseClient
+            .from('bentoinfo')
+            .select('bento_id, bento_name, price, img_link, allergy_info, explanation')
+            .in('bento_id', bentoIds);
+
+        // IDをキーにしたマップを作成
+        const bentoMap: Record<number, any> = {};
+        (bentoInfos || []).forEach(b => {
+             // ここで Storage URL を解決
+            b.img_link = getBentoImageUrl(b.img_link);
+            bentoMap[b.bento_id] = b;
+        });
+
+        // 3. データを結合して返却
+        const history: HistoryRecord[] = orders.map((item: any) => {
+            const detail = item.bento_id ? bentoMap[item.bento_id] : null;
+            return {
+                id: item.order_id,
+                bento_id: item.bento_id,
+                bento: detail?.bento_name || item.bento_type,
+                date: item.order_date,
+                status: item.status ? '完了' : '未完了',
+                price: detail?.price,
+                img_link: detail?.img_link,
+                allergy_info: detail?.allergy_info,
+                explanation: detail?.explanation
+            };
+        });
+        
         return { success: true, history };
-    } catch {
+    } catch (e) {
+        console.error('getHistoryAction error:', e);
         return { success: false, history: [] };
     }
 }
@@ -308,17 +392,13 @@ export async function getTodayOrderAction(userId: string) {
         const studentId = parseInt(userId, 10);
         if (isNaN(studentId)) return { success: false, order: null, bentoInfo: null };
 
-        const today = new Date();
-        const todayStr = today.toLocaleDateString('ja-JP', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-        }).replaceAll('/', '-');
+        const todayStr = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+            .toISOString().slice(0, 10);
 
-        // 本日の注文を取得
+        // 本日の注文を取得 (bento_idも取得するようにselectを修正)
         const { data: orders, error: orderErr } = await supabaseClient
             .from('order_log')
-            .select('*')
+            .select('order_id, bento_type, bento_id, order_date, is_received, received_at')
             .eq('student_id', studentId)
             .eq('order_date', todayStr)
             .eq('status', true);
@@ -328,20 +408,24 @@ export async function getTodayOrderAction(userId: string) {
 
         const order = orders[0];
 
-        // scheduleテーブルから本日の弁当IDを取得
-        const { data: schedules } = await supabaseClient
-            .from('schedule')
-            .select('bento_id')
-            .eq('schedule_date', todayStr);
-
+        // bento_id を使ってお弁当の詳細情報を確実に取得
         let bentoInfo = null;
-        if (schedules && schedules.length > 0) {
-            // order_logのbento_typeでbentoInfoを検索（名前一致）
+        if (order.bento_id) {
+            const { data: bInfo } = await supabaseClient
+                .from('bentoinfo')
+                .select('bento_id, bento_name, price, explanation, img_link, allergy_info')
+                .eq('bento_id', order.bento_id)
+                .single();
+            if (bInfo) bInfo.img_link = getBentoImageUrl(bInfo.img_link);
+            bentoInfo = bInfo;
+        } else {
+            // 万が一 bento_id が無い場合のみ、名前で検索（旧データ対応）
             const { data: bInfo } = await supabaseClient
                 .from('bentoinfo')
                 .select('bento_id, bento_name, price, explanation, img_link, allergy_info')
                 .eq('bento_name', order.bento_type)
                 .single();
+            if (bInfo) bInfo.img_link = getBentoImageUrl(bInfo.img_link);
             bentoInfo = bInfo;
         }
 
@@ -349,6 +433,7 @@ export async function getTodayOrderAction(userId: string) {
             success: true,
             order: {
                 order_id: order.order_id,
+                bento_id: order.bento_id,
                 bento_type: order.bento_type,
                 order_date: order.order_date,
                 is_received: order.is_received ?? false,
@@ -374,12 +459,14 @@ export async function receiveOrderAction(orderId: number) {
         return { success: true };
     } catch (e) {
         console.error('receiveOrderAction error:', e);
+        await logErrorAction('ORDER_RECEIVED_ERROR', String(e), { orderId });
         return { success: false, error: '受け取り処理に失敗しました' };
     }
 }
 
+
 // --- 予約実行・キャンセルアクション ---
-export async function reserveAction(studentId: string, bentoType: string, date: string) {
+export async function reserveAction(studentId: string, bentoId: number, bentoName: string, date: string) {
     try {
         const sid = parseInt(studentId, 10);
         if (isNaN(sid)) return { success: false, message: "無効なユーザーIDです" };
@@ -387,7 +474,7 @@ export async function reserveAction(studentId: string, bentoType: string, date: 
         // 同じ日付の有効な予約を確認
         const { data: existing } = await supabaseClient
             .from("order_log")
-            .select("order_id, bento_type")
+            .select("order_id, bento_id")
             .eq("student_id", sid)
             .eq("order_date", date)
             .eq("status", true)
@@ -395,8 +482,8 @@ export async function reserveAction(studentId: string, bentoType: string, date: 
 
         const currentActive = existing;
         if (currentActive) {
-            // 同じ弁当を選んだ場合は「キャンセル」
-            if (currentActive.bento_type === bentoType) {
+            // 同じ弁当を選んだ場合は「キャンセル」 (bento_idで比較)
+            if (currentActive.bento_id === bentoId) {
                 const { error: cancelErr } = await supabaseClient
                     .from('order_log')
                     .update({ status: false })
@@ -412,11 +499,11 @@ export async function reserveAction(studentId: string, bentoType: string, date: 
                     .eq('order_id', currentActive.order_id);
                 if (deactivateErr) throw deactivateErr;
 
-                // B. 新しい内容で別行として予約を挿入
+                // B. 新しい内容で別行として予約を挿入 (bento_idも保存)
                 const { error: insertErr } = await supabaseClient
                     .from('order_log')
                     .insert([
-                        { student_id: studentId, bento_type: bentoType, order_date: date, status: true }
+                        { student_id: studentId, bento_id: bentoId, bento_type: bentoName, order_date: date, status: true }
                     ]);
                 if (insertErr) throw insertErr;
                 return { success: true, message: "予約を変更しました" };
@@ -426,13 +513,14 @@ export async function reserveAction(studentId: string, bentoType: string, date: 
             const { error: insErr } = await supabaseClient
                 .from('order_log')
                 .insert([
-                    { student_id: studentId, bento_type: bentoType, order_date: date, status: true }
+                    { student_id: studentId, bento_id: bentoId, bento_type: bentoName, order_date: date, status: true }
                 ]);
             if (insErr) throw insErr;
             return { success: true, message: "予約が完了しました" };
         }
     } catch (error) {
         console.error("reserveAction error:", error);
+        await logErrorAction('RESERVE_EXCEPTION', String(error), { bentoId, bentoName, date }, studentId);
         return { success: false, message: "処理に失敗しました" };
     }
 }
@@ -637,3 +725,41 @@ export async function resetPasswordWithSecretAction(num: string, secretAnswer: s
         return { success: false, error: '通信エラーが発生しました' };
     }
 }
+
+// --- 注文キャンセルアクション（履歴画面用） ---
+export async function cancelOrderAction(orderId: number) {
+    try {
+        // 1. 注文データを取得して日付をチェック
+        const { data: order, error: findErr } = await supabaseClient
+            .from('order_log')
+            .select('order_date')
+            .eq('order_id', orderId)
+            .single();
+
+        if (findErr || !order) return { success: false, error: '注文が見つかりませんでした' };
+
+        // 2. 当日かどうかチェック (日本時間基準)
+        const todayStr = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+            .toISOString().slice(0, 10);
+
+        if (order.order_date <= todayStr) {
+            return { success: false, error: '当日および過去の予約はキャンセルできません' };
+        }
+
+        // 3. ステータスを false に更新
+        const { error: updateErr } = await supabaseClient
+            .from('order_log')
+            .update({ status: false })
+            .eq('order_id', orderId);
+
+        if (updateErr) throw updateErr;
+
+        return { success: true };
+    } catch (e) {
+        console.error('cancelOrderAction error:', e);
+        await logErrorAction('ORDER_CANCEL_ERROR', String(e), { orderId });
+        return { success: false, error: 'キャンセル処理に失敗しました' };
+    }
+}
+
+

@@ -3,8 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ReservationForm from '@/components/ReservationForm';
-import { getHistoryAction, reserveAction, getFullBentoScheduleAction, type HistoryRecord } from '@/actions';
+import { getHistoryAction, reserveAction, getFullBentoScheduleAction, getJSTTodayStr, type HistoryRecord } from '@/actions';
 import { BentoInfo } from '@/types';
+import { useToast } from '@/components/ToastProvider';
+import { RefreshCw, AlertTriangle } from 'lucide-react';
 
 export default function BentoPage() {
   const [selectedBentoId, setSelectedBentoId] = useState<number | null>(null);
@@ -12,6 +14,7 @@ export default function BentoPage() {
   const [showOverlay, setShowOverlay] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   
   const [reservations, setReservations] = useState<Record<string, string>>({});
   const [bentoScheduleMap, setBentoScheduleMap] = useState<Record<string, BentoInfo[]>>({});
@@ -23,6 +26,7 @@ export default function BentoPage() {
   const [date, setDate] = useState<Date>(tomorrow);
 
   const router = useRouter();
+  const { showToast } = useToast();
 
   const formatDateKey = (d: Date): string => {
     return d.toLocaleDateString('ja-JP', {
@@ -32,59 +36,51 @@ export default function BentoPage() {
     }).replaceAll('/', '-');
   };
 
-  const fetchReservedDates = useCallback(async () => {
+  const fetchAllData = useCallback(async (isInitial = false) => {
     const userId = sessionStorage.getItem('userId');
-    if (!userId) return;
-    const data = await getHistoryAction(userId);
-    if (data.success && data.history) {
-      const resMap: Record<string, string> = {};
-      data.history.forEach((h: HistoryRecord) => {
-        const d = new Date(h.date);
-        if (!isNaN(d.getTime())) {
-          resMap[formatDateKey(d)] = h.bento;
-        }
-      });
-      setReservations(resMap);
+    if (!userId) {
+      router.replace('/login');
+      return;
     }
-  }, []);
+    
+    setIsSyncing(true);
+    setLoadError(false);
+
+    try {
+      const [historyRes, scheduleRes] = await Promise.all([
+        getHistoryAction(userId),
+        getFullBentoScheduleAction()
+      ]);
+
+      if (historyRes.success && historyRes.history) {
+        const resMap: Record<string, string> = {};
+        (historyRes.history as any[]).forEach((h) => {
+          const d = new Date(h.date);
+          if (!isNaN(d.getTime())) resMap[formatDateKey(d)] = h.bento;
+        });
+        setReservations(resMap);
+      } else if (!historyRes.success) {
+        setLoadError(true);
+      }
+
+      if (scheduleRes.success) {
+        setBentoScheduleMap(scheduleRes.scheduleMap);
+      } else {
+        setLoadError(true);
+      }
+    } catch (err) {
+      console.error("Data load error:", err);
+      setLoadError(true);
+      showToast('データの取得に失敗しました。再試行してください。', 'error');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [router, showToast]);
 
   useEffect(() => {
-    const initData = async () => {
-      const userId = sessionStorage.getItem('userId');
-      if (!userId) {
-        router.replace('/login');
-        return;
-      }
-      setIsAuthorized(true);
-      setIsSyncing(true);
-
-      try {
-        const [historyRes, scheduleRes] = await Promise.all([
-          getHistoryAction(userId),
-          getFullBentoScheduleAction()
-        ]);
-
-        if (historyRes.success && historyRes.history) {
-          const resMap: Record<string, string> = {};
-          (historyRes.history as any[]).forEach((h) => {
-            const d = new Date(h.date);
-            if (!isNaN(d.getTime())) resMap[formatDateKey(d)] = h.bento;
-          });
-          setReservations(resMap);
-        }
-
-        if (scheduleRes.success) {
-          setBentoScheduleMap(scheduleRes.scheduleMap);
-        }
-      } catch (err) {
-        console.error("Initial load error:", err);
-      } finally {
-        setIsSyncing(false);
-      }
-    };
-
-    initData();
-  }, [router]);
+    setIsAuthorized(true);
+    fetchAllData(true);
+  }, [fetchAllData]);
 
   useEffect(() => {
     const dateKey = formatDateKey(date);
@@ -113,23 +109,31 @@ export default function BentoPage() {
   const selectedBento = currentItems.find(item => item.bento_id === selectedBentoId);
   const isChanging = isReserved && selectedBento && selectedBento.bento_name !== reservedBentoName;
 
-  const handleReserveAction = async (targetBentoName: string) => {
+  const handleReserveAction = async (targetBentoId: number, targetBentoName: string) => {
     const userId = sessionStorage.getItem('userId') || "";
-    if (!targetBentoName || !userId) return;
+    if (!targetBentoId || !targetBentoName || !userId) return;
+
+    // 重大対策2: 予約直前にサーバー時間と比較して「今日」を再定義
+    const currentJSTToday = getJSTTodayStr();
+    if (dateKey <= currentJSTToday) {
+       showToast("当日・過去の予約は変更できません", "error");
+       return;
+    }
 
     setIsSubmitting(true);
     try {
-      const result = await reserveAction(userId, targetBentoName, dateKey);
+      const result = await reserveAction(userId, targetBentoId, targetBentoName, dateKey);
       if (result.success) {
-        await fetchReservedDates();
+        await fetchAllData();
         window.dispatchEvent(new Event('reservation-updated'));
         setIsCompleted(true);
+        showToast(result.message || '予約を更新しました', 'success');
       } else {
-        alert(result.message);
+        showToast(result.message || '失敗しました', 'error');
       }
     } catch (error) {
       console.error("送信エラー:", error);
-      alert("送信に失敗しました。");
+      showToast('送信に失敗しました', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -145,6 +149,25 @@ export default function BentoPage() {
 
   return (
     <main className="min-h-screen bg-[#f8f9fa] pb-20 relative">
+      {/* 重大対策3: 同期失敗時のリトライボタン */}
+      {loadError && !isSyncing && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[3000] w-[90%] max-w-sm">
+          <div className="bg-red-600 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-300">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <span className="text-xs font-black">データが正しく読み込めませんでした</span>
+            </div>
+            <button 
+              onClick={() => fetchAllData()}
+              className="bg-white text-red-600 px-4 py-1.5 rounded-full text-xs font-black shadow-sm active:scale-95 flex items-center gap-1 shrink-0"
+            >
+              <RefreshCw className="w-3 h-3" />
+              再試行
+            </button>
+          </div>
+        </div>
+      )}
+
       {isSyncing && (
         <div className="fixed top-6 right-6 z-[3000] bg-white/90 backdrop-blur px-5 py-3 rounded-2xl shadow-2xl border border-red-100 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-500">
           <div className="w-5 h-5 border-3 border-red-600 border-t-transparent rounded-full animate-spin"></div>
@@ -187,6 +210,7 @@ export default function BentoPage() {
                       <div className="text-4xl mb-3">🍱</div>
                       <p className="font-bold">この日の弁当情報がありません</p>
                       <p className="text-sm text-gray-400 mt-1">別の日を選択してください</p>
+                      <button onClick={() => fetchAllData()} className="mt-4 text-xs font-bold text-red-600 border border-red-200 px-4 py-2 rounded-full hover:bg-red-50 transition-colors">情報を再取得</button>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8">
@@ -207,16 +231,36 @@ export default function BentoPage() {
                             )}
                           </div>
                           <div className="p-3 md:p-4 flex-grow flex flex-col min-w-0">
-                            <span className={`font-bold text-base md:text-lg leading-tight truncate ${selectedBentoId === item.bento_id ? 'text-[#d63031]' : 'text-gray-800'}`}>
-                              {item.bento_name}
-                            </span>
-                            {reservedBentoName === item.bento_name && (
-                                <span className="inline-block mt-1 text-[0.6rem] font-bold bg-[#0984e3] text-white px-2 py-0.5 rounded-full w-fit">予約中</span>
-                            )}
-                            <span className="text-base md:text-xl font-black mt-2">¥{item.price.toLocaleString()}</span>
-                          </div>
+                                <span className={`font-bold text-base md:text-lg leading-tight truncate ${selectedBentoId === item.bento_id ? 'text-[#d63031]' : 'text-gray-800'}`}>
+                                  {item.bento_name}
+                                </span>
+                                {reservedBentoName === item.bento_name && (
+                                    <span className="inline-block mt-1 text-[0.6rem] font-bold bg-[#0984e3] text-white px-2 py-0.5 rounded-full w-fit">予約中</span>
+                                )}
+                                <p className="mt-1 text-[10px] md:text-xs text-gray-500 line-clamp-2 min-h-[2.5em]">
+                                  {item.explanation || 'お弁当の詳細はスタッフまで。'}
+                                </p>
+                                <span className="text-base md:text-xl font-black mt-2">¥{item.price.toLocaleString()}</span>
+                            </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {selectedBento && (
+                    <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-black px-2 py-0.5 bg-[#d63031] text-white rounded-md uppercase">Selected</span>
+                        <h4 className="font-black text-gray-800">{selectedBento.bento_name}</h4>
+                      </div>
+                      <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                        {selectedBento.explanation || 'おいしいお弁当をお届けします。'}
+                      </p>
+                      {selectedBento.allergy_info && (
+                        <p className="mt-2 text-[10px] text-orange-600 font-bold flex items-center gap-1">
+                          ⚠️ アレルギー：{selectedBento.allergy_info}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -226,7 +270,7 @@ export default function BentoPage() {
                       {(isChanging || !isReserved) && (
                         <button
                           type="button"
-                          onClick={() => handleReserveAction(selectedBento?.bento_name || "")}
+                          onClick={() => handleReserveAction(selectedBento?.bento_id || 0, selectedBento?.bento_name || "")}
                           disabled={isSubmitting || !selectedBentoId}
                           className={`flex-1 p-4 md:p-5 rounded-2xl text-white font-black text-sm md:text-lg shadow-xl transition-all active:scale-[0.98] ${
                             isSubmitting ? 'bg-gray-400' : 
@@ -243,7 +287,7 @@ export default function BentoPage() {
                       {isReserved && (
                         <button
                           type="button"
-                          onClick={() => handleReserveAction(reservedBentoName)}
+                          onClick={() => handleReserveAction(selectedBentoId || 0, reservedBentoName)}
                           disabled={isSubmitting}
                           className={`flex-1 p-4 md:p-5 rounded-2xl font-black text-sm md:text-lg shadow-xl transition-all active:scale-[0.98] border-2 ${
                             isSubmitting ? 'bg-gray-100 text-gray-400 border-gray-100' : 

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 export default function CompletePage() {
     const router = useRouter();
     const [isAuthorized, setIsAuthorized] = useState(false);
+    const [orderInfo, setOrderInfo] = useState({ id: '---', building: '---' });
 
     useEffect(() => {
         const userName = sessionStorage.getItem('userName');
@@ -14,6 +15,11 @@ export default function CompletePage() {
             router.replace('/login');
         } else {
             setIsAuthorized(true);
+            const params = new URLSearchParams(window.location.search);
+            setOrderInfo({
+                id: params.get('order_id') || '---',
+                building: params.get('building_id') || '---'
+            });
         }
     }, [router]);
 
@@ -28,20 +34,9 @@ export default function CompletePage() {
 
                 <h1 className="text-2xl md:text-3xl font-extrabold text-[#2d3436] mb-4">予約が完了しました</h1>
 
-                <p className="text-[#636e72] mb-8 leading-relaxed text-[0.95rem]">
+                <p className="text-[#636e72] mb-12 leading-relaxed text-[0.95rem]">
                     お弁当のご予約を承りました。<br />
                 </p>
-
-                <div className="bg-[#f8f9fa] p-5 rounded-xl mb-8 text-left text-[0.9rem] border border-[#eaeced]">
-                    <div className="mb-2 flex justify-between items-center">
-                        <span className="text-[#636e72]">予約番号</span>
-                        <span className="font-extrabold text-[#2d3436]">#BK-20260305</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-[#636e72]">受取場所</span>
-                        <span className="font-extrabold text-[#2d3436]">1F 受付カウンター</span>
-                    </div>
-                </div>
 
                 <Link href="/" className="btn btn-primary w-full p-4 mb-4 shadow-md no-underline">
                     予約画面戻る

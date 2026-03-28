@@ -18,6 +18,8 @@ export const metadata: Metadata = {
 };
 
 import Sidebar from "@/components/Sidebar";
+import { ToastProvider } from "@/components/ToastProvider";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function RootLayout({
   children,
@@ -27,12 +29,16 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body className={`${inter.variable} ${outfit.variable} antialiased`}>
-        <div className="flex flex-col lg:flex-row min-h-screen">
-          <Sidebar />
-          <div className="flex-grow bg-[#fdfdfd] min-w-0 w-full">
-            {children}
+        <ToastProvider>
+          <div className="flex flex-col lg:flex-row min-h-screen">
+            <Sidebar />
+            <div className="flex-grow bg-[#fdfdfd] min-w-0 w-full">
+              <ErrorBoundary>
+                {children}
+              </ErrorBoundary>
+            </div>
           </div>
-        </div>
+        </ToastProvider>
       </body>
     </html>
   );

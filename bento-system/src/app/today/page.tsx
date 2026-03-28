@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { getTodayOrderAction, receiveOrderAction } from '@/actions';
+import { useToast } from '@/components/ToastProvider';
 
 const buildingStyles: { [key: string]: { bg: string; text: string; label: string } } = {
     '1': { bg: 'bg-blue-600', text: 'text-blue-600', label: '1号館受取' },
@@ -39,6 +40,7 @@ export default function TodayPage() {
     const [confirmStatus, setConfirmStatus] = useState<ConfirmStatus>('idle');
     const [isProcessing, setIsProcessing] = useState(false);
     const [buildingId, setBuildingId] = useState('1');
+    const { showToast } = useToast();
 
     const fetchTodayOrder = useCallback(async () => {
         const userId = sessionStorage.getItem('userId');
@@ -63,7 +65,7 @@ export default function TodayPage() {
         fetchTodayOrder();
     }, [fetchTodayOrder]);
 
-    const style = buildingStyles[buildingId] || buildingStyles['default'];
+    const style = buildingStyles[buildingId] || { bg: 'bg-gray-500', text: 'text-gray-500', label: '受取場所未定' };
 
     // 受け取りボタン押下
     const handleReceiveClick = () => setConfirmStatus('confirming');
@@ -77,11 +79,12 @@ export default function TodayPage() {
             if (result.success) {
                 setOrder(prev => prev ? { ...prev, is_received: true, received_at: new Date().toISOString() } : null);
                 setConfirmStatus('idle');
+                showToast('受け取りを完了しました！', 'success');
             } else {
-                alert('受け取り処理に失敗しました。再度お試しください。');
+                showToast('受け取り処理に失敗しました。', 'error');
             }
         } catch {
-            alert('通信エラーが発生しました。');
+            showToast('通信エラーが発生しました。', 'error');
         } finally {
             setIsProcessing(false);
         }

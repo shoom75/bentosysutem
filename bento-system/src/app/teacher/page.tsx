@@ -45,9 +45,10 @@ export default function TeacherPage() {
     const [userBuildingId, setUserBuildingId] = useState<string | null>(null);
     const router = useRouter();
 
-    const todayStr = () => new Date().toLocaleDateString('ja-JP', {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-    }).replaceAll('/', '-');
+    const todayStr = () => {
+        const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
 
     const fetchOrders = useCallback(async (date?: string) => {
         setIsLoading(true);
@@ -65,8 +66,7 @@ export default function TeacherPage() {
     useEffect(() => {
         const root = sessionStorage.getItem('is_root') === 'true';
         const bid = sessionStorage.getItem('building_id');
-        const studentNum = sessionStorage.getItem('studentNum');
-        const isStaff = root || (studentNum && studentNum.length <= 4);
+        const isStaff = root; // 管理者(is_root)のみに制限
 
         if (!isStaff) {
             router.replace('/');
