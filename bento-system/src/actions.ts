@@ -17,7 +17,7 @@ export interface HistoryRecord {
 /**
  * 日本時間 (JST) の今日の日付文字列 (YYYY-MM-DD) を取得するヘルパー
  */
-export function getJSTTodayStr() {
+export async function getJSTTodayStr() {
     return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
         .toISOString().slice(0, 10);
 }
@@ -26,7 +26,7 @@ export function getJSTTodayStr() {
  * Supabase Storage の公開URLを取得するヘルパー
  * imgPath が http:// から始まっていればそのまま、そうでなければ Storage の URL を組み立てる
  */
-export function getBentoImageUrl(imgPath: string | null) {
+export async function getBentoImageUrl(imgPath: string | null) {
     if (!imgPath) return null;
     if (imgPath.startsWith('http')) return imgPath;
     
@@ -222,11 +222,13 @@ export async function getHistoryAction(userId: string) {
 
         // IDをキーにしたマップを作成
         const bentoMap: Record<number, any> = {};
-        (bentoInfos || []).forEach(b => {
-             // ここで Storage URL を解決
-            b.img_link = getBentoImageUrl(b.img_link);
-            bentoMap[b.bento_id] = b;
-        });
+        if (bentoInfos) {
+            for (const b of bentoInfos) {
+                // ここで Storage URL を解決
+                b.img_link = await getBentoImageUrl(b.img_link);
+                bentoMap[b.bento_id] = b;
+            }
+        }
 
         // 3. データを結合して返却
         const history: HistoryRecord[] = orders.map((item: any) => {
@@ -416,7 +418,7 @@ export async function getTodayOrderAction(userId: string) {
                 .select('bento_id, bento_name, price, explanation, img_link, allergy_info')
                 .eq('bento_id', order.bento_id)
                 .single();
-            if (bInfo) bInfo.img_link = getBentoImageUrl(bInfo.img_link);
+            if (bInfo) bInfo.img_link = await getBentoImageUrl(bInfo.img_link);
             bentoInfo = bInfo;
         } else {
             // 万が一 bento_id が無い場合のみ、名前で検索（旧データ対応）
@@ -425,7 +427,7 @@ export async function getTodayOrderAction(userId: string) {
                 .select('bento_id, bento_name, price, explanation, img_link, allergy_info')
                 .eq('bento_name', order.bento_type)
                 .single();
-            if (bInfo) bInfo.img_link = getBentoImageUrl(bInfo.img_link);
+            if (bInfo) bInfo.img_link = await getBentoImageUrl(bInfo.img_link);
             bentoInfo = bInfo;
         }
 

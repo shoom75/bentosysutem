@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import ReservationForm from '@/components/ReservationForm';
-import { getHistoryAction, reserveAction, getFullBentoScheduleAction, getJSTTodayStr, type HistoryRecord } from '@/actions';
+import { getHistoryAction, reserveAction, getFullBentoScheduleAction, type HistoryRecord, getJSTTodayStr } from '@/actions';
 import { BentoInfo } from '@/types';
 import { useToast } from '@/components/ToastProvider';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
@@ -114,7 +114,7 @@ export default function BentoPage() {
     if (!targetBentoId || !targetBentoName || !userId) return;
 
     // 重大対策2: 予約直前にサーバー時間と比較して「今日」を再定義
-    const currentJSTToday = getJSTTodayStr();
+    const currentJSTToday = await getJSTTodayStr();
     if (dateKey <= currentJSTToday) {
        showToast("当日・過去の予約は変更できません", "error");
        return;
