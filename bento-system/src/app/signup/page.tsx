@@ -43,7 +43,7 @@ export default function SignupPage() {
         email: '',
         building_id: '1',
         school_year: '1',
-        class: '',
+        class: 'A',
         attendance_num: '',
         secret_answer: ''
     });
@@ -312,15 +312,17 @@ export default function SignupPage() {
                                 <label className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-wider ml-1">
                                     <Users className="w-3 h-3" /> クラス
                                 </label>
-                                <input
-                                    type="text"
+                                <select
                                     name="class"
                                     required
-                                    placeholder="A"
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#d63031]/10 focus:border-[#d63031] transition-all"
+                                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#d63031]/10 focus:border-[#d63031] transition-all appearance-none cursor-pointer"
                                     value={formData.class}
                                     onChange={handleChange}
-                                />
+                                >
+                                    {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'].map(c => (
+                                        <option key={c} value={c}>{c}組</option>
+                                    ))}
+                                </select>
                             </div>
 
                             {/* 番号 */}

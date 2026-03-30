@@ -170,19 +170,6 @@ nextjs-portal,
   position: relative;
 }
 
-/* 左上に小さなオレンジ三角インジケーター */
-.react-calendar__tile.has-bento-schedule::before {
-  content: '';
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 5px;
-  height: 5px;
-  background: #ff9800;
-  border-radius: 50%;
-  opacity: 0.75;
-}
-
 /* ホバー時は少し濃く */
 .react-calendar__tile.has-bento-schedule:hover {
   background: #ffe0b2 !important;

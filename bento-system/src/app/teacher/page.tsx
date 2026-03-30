@@ -13,8 +13,11 @@ import {
     UtensilsCrossed,
     RefreshCw,
     ChevronRight,
-    ArrowLeft
+    ArrowLeft,
+    Eye,
+    X
 } from 'lucide-react';
+import BentoPage from '../page'; // 生徒画面を再利用
 
 interface Order {
     order_id: number;
@@ -229,6 +232,3 @@ export default function TeacherPage() {
         </div>
     );
 }
-
-
-

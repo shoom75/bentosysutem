@@ -637,7 +637,7 @@ export async function getProfileAction(userId: string) {
 
         const { data: user, error } = await supabaseClient
             .from('user_list')
-            .select('num, email, building_id, secret_answer')
+            .select('num, email, building_id, secret_answer, school_year, class, fiscal_year')
             .eq('id', studentId)
             .single();
 
@@ -647,6 +647,41 @@ export async function getProfileAction(userId: string) {
     } catch (e) {
         console.error('getProfileAction error:', e);
         return { success: false, profile: null };
+    }
+}
+
+// --- プロフィール一括更新アクション (進級・年度更新用) ---
+export async function updateProfileAction(userId: string, updates: { 
+    school_year: number; 
+    class: string; 
+    building_id: number;
+}) {
+    try {
+        const studentId = parseInt(userId, 10);
+        if (isNaN(studentId)) return { success: false, error: 'ユーザーIDが不正です' };
+
+        // 現在の年度（Fiscal Year）を計算（4月〜翌3月）
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        const fiscalYear = currentMonth < 4 ? currentYear - 1 : currentYear;
+
+        const { error } = await supabaseClient
+            .from('user_list')
+            .update({
+                school_year: updates.school_year,
+                class: updates.class,
+                building_id: updates.building_id,
+                fiscal_year: fiscalYear // 更新時の年度をセット
+            })
+            .eq('id', studentId);
+
+        if (error) throw error;
+        
+        return { success: true };
+    } catch (e) {
+        console.error('updateProfileAction error:', e);
+        return { success: false, error: 'プロフィールの更新に失敗しました' };
     }
 }
 

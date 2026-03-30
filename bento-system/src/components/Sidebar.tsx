@@ -14,7 +14,8 @@ import {
     Menu,
     X,
     User,
-    ChevronRight
+    ChevronRight,
+    Eye
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -32,6 +33,12 @@ export default function Sidebar() {
     const toggleSidebar = () => setIsOpen(!isOpen);
 
     if (pathname?.toLowerCase() === '/login' || pathname?.toLowerCase() === '/signup') return null;
+
+    // プレビューモード（教員用画面などでのiframe表示）時はサイドバーを隠す
+    if (typeof window !== 'undefined') {
+        const isPreview = new URLSearchParams(window.location.search).get('preview') === 'true';
+        if (isPreview) return null;
+    }
 
     const NavLink = ({ href, icon: Icon, children }: { href: string, icon: any, children: React.ReactNode }) => {
         const isActive = pathname === href;
@@ -96,6 +103,7 @@ export default function Sidebar() {
                                 <>
                                     <NavLink href="/teacher" icon={ClipboardList}>当日状況ページ</NavLink>
                                     <NavLink href="/teacher/summary" icon={BarChart3}>予約集計ページ</NavLink>
+                                    <NavLink href="/student-preview" icon={Eye}>学生画面の確認</NavLink>
                                 </>
                             ) : (
                                 <>

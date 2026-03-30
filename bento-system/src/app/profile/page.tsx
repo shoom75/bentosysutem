@@ -3,14 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Mail, Hash, MapPin, Loader2, ArrowLeft, LogOut, ShieldCheck, Key, Lock, Eye, EyeOff, HelpCircle } from 'lucide-react';
-import { getProfileAction, updateSecretAnswerAction } from '@/actions';
+import { getProfileAction, updateSecretAnswerAction, updateProfileAction } from '@/actions';
 import { supabase } from '@/lib/supabase';
 
 interface UserProfile {
     num: number;
     email: string;
     building_id: number;
+    school_year: number;
+    class: string;
     secret_answer?: string;
+    fiscal_year?: number;
 }
 
 const buildings = [
@@ -43,6 +46,22 @@ export default function ProfilePage() {
     const [secretError, setSecretError] = useState('');
     const [secretSuccess, setSecretSuccess] = useState(false);
     const [updatingSecret, setUpdatingSecret] = useState(false);
+    
+    // メールアドレス変更用のState
+    const [isEditingEmail, setIsEditingEmail] = useState(false);
+    const [newEmail, setNewEmail] = useState('');
+    const [emailError, setEmailError] = useState('');
+    const [emailSuccess, setEmailSuccess] = useState(false);
+    const [updatingEmail, setUpdatingEmail] = useState(false);
+    
+    // 年度更新（進級）用のState
+    const [isEditingGrade, setIsEditingGrade] = useState(false);
+    const [newSchoolYear, setNewSchoolYear] = useState(1);
+    const [newClass, setNewClass] = useState('A');
+    const [newBuildingId, setNewBuildingId] = useState(1);
+    const [gradeError, setGradeError] = useState('');
+    const [gradeSuccess, setGradeSuccess] = useState(false);
+    const [updatingGrade, setUpdatingGrade] = useState(false);
 
     const router = useRouter();
 
@@ -64,6 +83,32 @@ export default function ProfilePage() {
         };
         fetchProfile();
     }, [router]);
+
+    const handleUpdateEmail = async () => {
+        setEmailError('');
+        setEmailSuccess(false);
+
+        if (!newEmail || !newEmail.includes('@')) {
+            setEmailError('有効なメールアドレスを入力してください');
+            return;
+        }
+
+        setUpdatingEmail(true);
+        const { error: updateError } = await supabase.auth.updateUser({
+            email: newEmail
+        });
+
+        if (updateError) {
+            setEmailError('メールの更新に失敗しました: ' + updateError.message);
+        } else {
+            setEmailSuccess(true);
+            setTimeout(() => {
+                setIsEditingEmail(false);
+                setEmailSuccess(false);
+            }, 5000);
+        }
+        setUpdatingEmail(false);
+    };
 
     const handleLogout = () => {
         sessionStorage.clear();
@@ -130,6 +175,40 @@ export default function ProfilePage() {
         setUpdatingSecret(false);
     };
 
+    const handleUpdateGrade = async () => {
+        setGradeError('');
+        setGradeSuccess(false);
+        setUpdatingGrade(true);
+        
+        const userId = sessionStorage.getItem('userId');
+        if (userId) {
+            const data = await updateProfileAction(userId, {
+                school_year: newSchoolYear,
+                class: newClass,
+                building_id: newBuildingId
+            });
+            if (data.success) {
+                setGradeSuccess(true);
+                setProfile(prev => prev ? { 
+                    ...prev, 
+                    school_year: newSchoolYear, 
+                    class: newClass, 
+                    building_id: newBuildingId 
+                } : null);
+                // セッションストレージも更新（共通の参照キーがある場合）
+                sessionStorage.setItem('building_id', newBuildingId.toString());
+                
+                setTimeout(() => {
+                    setIsEditingGrade(false);
+                    setGradeSuccess(false);
+                }, 3000);
+            } else {
+                setGradeError(data.error || '更新に失敗しました');
+            }
+        }
+        setUpdatingGrade(false);
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-[#F8FAFC] flex flex-col pt-16 lg:pt-8 p-4 lg:p-8 animate-in fade-in duration-500">
@@ -194,19 +273,53 @@ export default function ProfilePage() {
                                     <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm text-slate-400 group-hover:text-[#d63031] transition-colors mr-4 shrink-0">
                                         <Mail className="w-5 h-5" />
                                     </div>
-                                    <div className="flex flex-col overflow-hidden">
+                                    <div className="flex flex-col flex-1 overflow-hidden">
                                         <span className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">メールアドレス</span>
                                         <span className="text-[15px] font-bold text-slate-700 truncate">{profile?.email || '未設定'}</span>
                                     </div>
+                                    <button
+                                        onClick={() => {
+                                            setNewEmail(profile?.email || '');
+                                            setIsEditingEmail(true);
+                                        }}
+                                        className="text-xs font-bold text-[#d63031] bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors ml-2 shrink-0"
+                                    >
+                                        変更
+                                    </button>
                                 </div>
 
-                                <div className="group flex items-center p-4 rounded-2xl bg-slate-50 border border-slate-100/50 hover:bg-slate-100 transition-colors">
-                                    <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm text-slate-400 group-hover:text-[#d63031] transition-colors mr-4 shrink-0">
+                                {/* メールアドレス変更フォーム */}
+                                {isEditingEmail && (
+                                    <div className="animate-in fade-in slide-in-from-top-2">
+                                        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+                                            <h3 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2">
+                                                <Mail className="w-4 h-4 text-[#d63031]" />
+                                                メールアドレスを変更
+                                            </h3>
+                                            {emailError && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-xs font-bold border border-red-100">{emailError}</div>}
+                                            {emailSuccess && <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-xl text-xs font-bold border border-green-100">確認メールを送信しました。新しいアドレスの受信箱を確認してください。</div>}
+                                            <div className="space-y-4">
+                                                <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none" placeholder="新しいメールアドレス" />
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => setIsEditingEmail(false)} className="flex-1 bg-white border border-slate-200 text-slate-500 font-bold py-3 rounded-xl text-sm">キャンセル</button>
+                                                    <button onClick={handleUpdateEmail} disabled={updatingEmail} className="flex-1 bg-[#d63031] text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2">
+                                                        {updatingEmail && <Loader2 className="w-4 h-4 animate-spin" />}変更
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="group flex items-center p-4 rounded-2xl bg-slate-50 border border-slate-100/50">
+                                    <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm text-slate-400 mr-4 shrink-0">
                                         <MapPin className="w-5 h-5" />
                                     </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">所属号館</span>
-                                        <span className="text-[15px] font-bold text-slate-700">{buildingName}</span>
+                                    <div className="flex flex-col flex-1">
+                                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">現在の所属</span>
+                                        <span className="text-[15px] font-bold text-slate-700">
+                                            {profile?.school_year}年 {profile?.class}組 ({buildingName})
+                                        </span>
                                     </div>
                                 </div>
                                 
